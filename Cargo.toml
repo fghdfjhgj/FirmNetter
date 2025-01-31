@@ -2,6 +2,9 @@
 name = "t3_lib_rust"
 version = "0.1.2"
 edition = "2021"
+description = "测试，请勿使用！"
+repository = "https://github.com/fghdfjhgj/lib_rust"
+documentation = "README.md"
 license = "Apache-2.0"
 [lib]
 crate-type = ["cdylib"]
