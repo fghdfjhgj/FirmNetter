@@ -1,4 +1,5 @@
-pub mod sql {
+
+#[deprecated(since = "0.1.0", note = "Deprecated")]pub mod sql {
     use crate::other_utils::free_and_reset_c_string;
     use diesel::pg::PgConnection;
     use diesel::prelude::*;
