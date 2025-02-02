@@ -2,8 +2,8 @@ pub mod utils {
     use std::ffi::{CStr, CString};
     use std::os::raw::c_char;
     use std::process::{Command, Stdio};
-    use std::ptr;
     use std::time::{SystemTime, UNIX_EPOCH};
+    use std::{fs, ptr};
     /// 定义一个对外的 C 接口，执行外部命令
     /// 该接口使用原始指针和长度来传递命令字符串，以适应 C 语言的调用习惯
     #[repr(C)]
@@ -209,6 +209,32 @@ pub mod utils {
             Err(_e) => {
                 // 返回 1 表示错误或无效的日期
                 1
+            }
+        }
+    }
+    /// 检查指定路径的文件是否存在
+    ///
+    /// # Parameters
+    ///
+    /// * `file_path` - 文件路径的C字符串指针
+    ///
+    /// # Returns
+    ///
+    /// * `1` - 文件存在
+    /// * `0` - 文件不存在
+    /// * `-1` - 发生其他错误
+    #[no_mangle]
+    pub extern "C" fn check_file(file_path: *const c_char) -> i32 {
+        // 将C字符串转换为Rust字符串
+        let file_path_str = cstring_to_string(file_path).unwrap();
+        match fs::metadata(file_path_str) {
+            Ok(_) => 1, // 文件存在，返回1
+            Err(e) => {
+                if e.kind() == std::io::ErrorKind::NotFound {
+                    0 // 文件不存在，返回0
+                } else {
+                    -1 // 其他错误发生，返回-1
+                }
             }
         }
     }
