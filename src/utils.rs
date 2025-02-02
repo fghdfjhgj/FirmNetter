@@ -1,6 +1,5 @@
 pub mod utils {
-    use std::ffi::{CStr, CString};
-    use std::os::raw::c_char;
+    use std::ffi::{CStr, CString, c_char};
     use std::process::{Command, Stdio};
     use std::time::{SystemTime, UNIX_EPOCH};
     use std::{fs, ptr};
