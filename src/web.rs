@@ -4,7 +4,7 @@ pub mod web {
     use std::fs::File;
     use std::io::copy;
     use std::os::raw::c_char;
-    use reqwest::blocking::get;
+    use reqwest::blocking::{get, Client};
     use crate::utils::utils::cstring_to_string;
     // 定义一个不会被 Rust 编译器重命名的外部函数，以便与 C 代码互操作
     #[no_mangle]
@@ -12,7 +12,7 @@ pub mod web {
         // 将传入的指针转换为字符串
         let url_str = cstring_to_string(url).expect("Failed to convert C string");
         // 创建一个新的 HTTP 客户端
-        let client = reqwest::blocking::Client::new();
+        let client = Client::new();
         // 发送 GET 请求并处理结果
         match client.get(url_str).send() {
             Ok(res) =>
@@ -44,23 +44,32 @@ pub mod web {
         // 将请求数据的指针和长度转换为字符串
         let data_str = cstring_to_string(data).expect("Failed to convert C string");
         // 创建一个新的 HTTP 客户端
-        let client = reqwest::blocking::Client::new();
+
         // 发送 POST 请求并处理响应
-        match client.post(url_str).body(data_str).send() {
-            Ok(res) =>
-                match res.text() {
-                Ok(text) => {
-                    // 将响应内容转换为 C 风格的字符串
-                    let cstr = CString::new(text).unwrap();
-                    cstr.into_raw()
-                }
-                Err(e) => {
-                    // 将错误信息转换为 C 风格的字符串
-                    let err_str = CString::new(format!("Error reading response: {}", e)).unwrap();
-                    err_str.into_raw()
-               }
-            },
-            Err(_) => todo!()
+        let client = match Client::new().post(&url_str).body(data_str).send() {
+            Ok(response) => response,
+            Err(e) => {
+                let err_msg = CString::new(format!("Failed to send request: {}", e)).unwrap();
+                return err_msg.into_raw();
+            }
+        };
+
+        // 获取响应文本
+        let response_text = match client.text() {
+            Ok(text) => text,
+            Err(e) => {
+                let err_msg = CString::new(format!("Failed to read response: {}", e)).unwrap();
+                return err_msg.into_raw();
+            }
+        };
+
+        // 将响应文本转换为 C 字符串并返回
+        match CString::new(response_text) {
+            Ok(cstr) => cstr.into_raw(),
+            Err(_) => {
+                let err_msg = CString::new("Failed to convert response to CString").unwrap();
+                err_msg.into_raw()
+            }
         }
     }
 

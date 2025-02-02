@@ -352,7 +352,7 @@ pub mod flash_phone {
     pub extern "C" fn adb_phone_start(id: *const c_char, modle: i32) -> *const c_char {
         // 将C风格字符串转换为Rust字符串
         let id_str = cstring_to_string(id).expect("error");
-        let mut modles;
+        let modles;
 
         // 根据modle参数选择不同的启动模式
         match modle {
