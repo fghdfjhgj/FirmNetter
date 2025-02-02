@@ -73,44 +73,47 @@ pub mod web {
         }
     }
 
+    // 定义一个对外的C接口，用于下载文件
+    // 该接口接收两个参数：文件的URL和保存的文件名
+    // 返回一个C字符串指针，通常用于传递错误信息或成功信息
     #[no_mangle]
     pub extern "C" fn downloader(url: *const c_char, file_name: *const c_char) -> *const c_char {
-    // 将 URL 和文件名的指针转换为字符串
-    let url = cstring_to_string(url).expect("Failed to convert C string");
-    let file_name = cstring_to_string(file_name).expect("Failed to convert C string");
+        // 将 URL 和文件名的指针转换为字符串
+        let url = cstring_to_string(url).expect("Failed to convert C string");
+        let file_name = cstring_to_string(file_name).expect("Failed to convert C string");
 
-    // 发送 GET 请求
-    let response = get(&url);
+        // 发送 GET 请求
+        let response = get(&url);
 
-    match response {
-        Ok(mut res) => {
-            if res.status().is_success() {
-                // 创建文件
-                let file = File::create(&file_name);
-                match file {
-                    Ok(mut file) => {
-                        // 将响应内容写入文件
-                        if let Err(e) = copy(&mut res, &mut file) {
-                            let err_str = CString::new(format!("Error writing to file: {}", e)).unwrap();
-                            return err_str.into_raw();
+        match response {
+            Ok(mut res) => {
+                if res.status().is_success() {
+                    // 创建文件
+                    let file = File::create(&file_name);
+                    match file {
+                        Ok(mut file) => {
+                            // 将响应内容写入文件
+                            if let Err(e) = copy(&mut res, &mut file) {
+                                let err_str = CString::new(format!("Error writing to file: {}", e)).unwrap();
+                                return err_str.into_raw();
+                            }
+                            // 返回成功信息
+                            let success_str = CString::new("File downloaded successfully").unwrap();
+                            success_str.into_raw()
                         }
-                        // 返回成功信息
-                        let success_str = CString::new("File downloaded successfully").unwrap();
-                        success_str.into_raw()
+                        Err(e) => {
+                            let err_str = CString::new(format!("Error creating file: {}", e)).unwrap();
+                            err_str.into_raw()
+                        }
                     }
-                    Err(e) => {
-                        let err_str = CString::new(format!("Error creating file: {}", e)).unwrap();
-                        err_str.into_raw()
-                    }
-                }
-            } else {
-                let err_str = CString::new(format!("Failed to download file, status code: {}", res.status())).unwrap();
-                err_str.into_raw()
+                } else {
+                    let err_str = CString::new(format!("Failed to download file, status code: {}", res.status())).unwrap();
+                    err_str.into_raw()
                 }
             }
             Err(e) => {
-            let err_str = CString::new(format!("Error sending request: {}", e)).unwrap();
-            err_str.into_raw()
+                let err_str = CString::new(format!("Error sending request: {}", e)).unwrap();
+                err_str.into_raw()
             }
         }
     }
