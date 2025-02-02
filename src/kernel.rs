@@ -26,7 +26,7 @@ pub mod kernel {
         // 根据 _h 标志决定是否添加 "-h" 参数
         let b = if _h { "-h" } else { "" };
         // 构建并执行 magisk.exe unpack 命令，返回命令执行的成功状态
-        exec(str_to_cstr(format!("magisk.exe unpack {} {} {}", a, b cstring_to_string(file_name).unwrap()))).stdout
+        exec(str_to_cstr(format!("magisk.exe unpack {} {} {}", a, b ,cstring_to_string(file_name).unwrap()))).stdout
     }
     #[no_mangle]
     /// 将镜像重新打包

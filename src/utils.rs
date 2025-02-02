@@ -85,7 +85,7 @@ pub mod utils {
         #[cfg(target_os = "windows")]
         let shell_command = "cmd";
         #[cfg(not(target_os = "windows"))]
-        let shell_command = ("bin/bash");
+        let shell_command = "bin/bash";
         // 执行命令并获取输出和错误信息
         let output = match Command::new(shell_command)
             .args(&["/C", &com])
