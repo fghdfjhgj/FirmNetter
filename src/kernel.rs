@@ -47,7 +47,30 @@ pub mod kernel {
         // 构建并执行 magisk.exe pack 命令，返回命令执行的成功状态
         exec(str_to_cstr(format!("magisk.exe pack {} {} {}", a, cstring_to_string(origboot).expect("error"), cstring_to_string(out_file_name).expect("error")))).stdout
     }
-
+    /// 验证文件完整性
+    ///
+    /// 此函数通过调用外部的 `magisk.exe` 工具来验证文件的完整性它使用 C ABI 来允许从 C 代码中调用，
+    /// 主要用于与 C 语言环境或其他限制性环境交互
+    ///
+    /// # 参数
+    ///
+    /// * `file` - 指向文件路径的 C 风格字符串指针需要验证的文件路径
+    /// * `pom` - 指向另一个文件路径的 C 风格字符串指针，通常用于指定验证所需的额外参数或配置文件
+    ///
+    /// # 返回值
+    ///
+    /// 返回一个指向 C 风格字符串的指针，该字符串包含验证过程的标准输出结果
+    /// 如果在转换字符串或执行过程中遇到错误，此函数将返回一个错误信息
+    ///
+    /// # 安全性
+    ///
+    /// 调用此函数时需要确保传入的字符串指针有效，且指向的字符串在函数调用过程中保持有效
+    /// 由于此函数直接构造命令行命令并执行，应确保输入参数不会导致命令行注入安全风险
+    #[no_mangle]
+    pub extern "C" fn verify(file: *const c_char, pom: *const c_char) -> *const c_char {
+        // 构造并执行验证命令，返回验证结果的标准输出
+        exec(str_to_cstr(format!("magisk.exe pack {} {} ", cstring_to_string(file).expect("error"), cstring_to_string(pom).expect("error")))).stdout
+    }
 
 }
 
