@@ -85,10 +85,23 @@ pub mod utils {
         #[cfg(target_os = "windows")]
         let shell_command = "cmd";
         #[cfg(not(target_os = "windows"))]
-        let shell_command = "bin/bash";
+        let shell_command = "sh"; // 注意这里改为 'sh' 而不是 'bin/bash'
+
+        #[cfg(target_os = "windows")]
+        let arg_prefix = "/C";
+        #[cfg(not(target_os = "windows"))]
+        let arg_prefix = "-c";
+
+        // 构造完整的命令字符串，首先设置代码页为 65001 (UTF-8)，然后执行用户提供的命令
+        #[cfg(target_os = "windows")]
+        let full_command = format!("chcp 65001 > nul && {}", com);
+        #[cfg(not(target_os = "windows"))]
+        let full_command = com; // 对于非Windows系统，直接使用原始命令
+
         // 执行命令并获取输出和错误信息
         let output = match Command::new(shell_command)
-            .args(&["/C", &com])
+            .arg(arg_prefix)
+            .arg(&full_command)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .output()
