@@ -9,6 +9,7 @@ pub mod flash_phone {
     /// 该结构体包含指向表示各种Android系统信息的字符字符串指针。
     /// 使用 `#[repr(C)]` 确保结构体在内存中的布局与C语言约定兼容，
     /// 便于Rust与C代码之间的互操作，特别是在访问Android的原生API时非常有用。
+    ///
     #[repr(C)]
     pub struct NoRootPhoneData {
         /// 指向表示Android内核版本的字符字符串的指针。
@@ -266,13 +267,14 @@ pub mod flash_phone {
     }
 
     #[no_mangle]
-    pub extern "C" fn adb_devices_phone(id: *const c_char) -> *const c_char {
-        execute_adb_command(id, str_to_cstr("devices".parse().unwrap()),str_to_cstr("".parse().unwrap()))
+    pub extern "C" fn adb_devices_phone() -> *const c_char {
+        exec(str_to_cstr("adb devices".parse().unwrap())).stdout
+
     }
 
     #[no_mangle]
-    pub extern "C" fn fastboot_devices_phone(id: *const c_char) -> *const c_char {
-        execute_fastboot_command(id, str_to_cstr("devices".parse().unwrap()),str_to_cstr("".parse().unwrap()))
+    pub extern "C" fn fastboot_devices_phone() -> *const c_char {
+        exec(str_to_cstr("fastboot devices".parse().unwrap())).stdout
     }
 
     #[no_mangle]
@@ -424,5 +426,6 @@ pub mod flash_phone {
             str_to_cstr(cstring_to_string(res.stderr).expect("REASON"))
         }
     }
+   
 
 }
