@@ -83,25 +83,25 @@ pub mod utils {
             _ => return CommandResult::new(false, ptr::null_mut(), ptr::null_mut()),
         };
         #[cfg(target_os = "windows")]
-        let shell_command = "cmd";
+        let shell_command = "powershell.exe";
         #[cfg(not(target_os = "windows"))]
         let shell_command = "sh"; // 注意这里改为 'sh' 而不是 'bin/bash'
 
         #[cfg(target_os = "windows")]
-        let arg_prefix = "/C";
+        let arg_prefix = "-NoProfile -ExecutionPolicy Bypass -Command";
         #[cfg(not(target_os = "windows"))]
         let arg_prefix = "-c";
-
-        // 构造完整的命令字符串，首先设置代码页为 65001 (UTF-8)，然后执行用户提供的命令
+        // 构造完整的命令字符串
         #[cfg(target_os = "windows")]
-        let full_command = format!("chcp 65001 > nul && {}", com);
+        let full_command = format!("\"{}\"", com); // 使用双引号包裹命令以确保正确解析
         #[cfg(not(target_os = "windows"))]
         let full_command = com; // 对于非Windows系统，直接使用原始命令
 
+        // 构造完整的命令字符串，首先设置代码页为 65001 (UTF-8)，然后执行用户提供的命令
         // 执行命令并获取输出和错误信息
         let output = match Command::new(shell_command)
-            .arg(arg_prefix)
-            .arg(&full_command)
+            .arg(arg_prefix) // 传递参数前缀
+            .arg(&full_command) // 传递命令字符串
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .output()
