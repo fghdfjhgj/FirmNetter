@@ -7,7 +7,7 @@ repository = "https://github.com/fghdfjhgj/lib_rust"
 documentation = "https://github.com/fghdfjhgj/lib_rust/blob/main/README.md"
 license = "Apache-2.0"
 [lib]
-crate-type = ["cdylib"]
+crate-type = ["cdylib","rlib"]
 
 
 
