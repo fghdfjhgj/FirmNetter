@@ -1,5 +1,6 @@
 pub mod utils {
-    use std::ffi::{CStr, CString, c_char};
+
+    use std::ffi::{c_char, CStr, CString};
     use std::process::{Command, Stdio};
     use std::time::{SystemTime, UNIX_EPOCH};
     use std::{fs, ptr};
@@ -72,36 +73,23 @@ pub mod utils {
     /// 返回一个 `CommandResult` 结构体，包含命令执行的结果。
     #[no_mangle]
     pub extern "C" fn exec(command: *const c_char) -> CommandResult {
-        // 安全检查：确保传入的指针是有效的。
-        if command.is_null() {
-            return CommandResult::new(false, ptr::null_mut(), ptr::null_mut());
-        }
-
-        // 将 *const c_char 转换为 String
-        let com = match unsafe { CStr::from_ptr(command).to_string_lossy().into_owned() } {
-            s if !s.is_empty() => s,
-            _ => return CommandResult::new(false, ptr::null_mut(), ptr::null_mut()),
-        };
+        // 根据目标操作系统选择合适的 shell 命令
         #[cfg(target_os = "windows")]
-        let shell_command = "powershell.exe";
+        let shell_command = "cmd";
         #[cfg(not(target_os = "windows"))]
         let shell_command = "sh"; // 注意这里改为 'sh' 而不是 'bin/bash'
 
+        // 根据目标操作系统选择合适的命令参数前缀
         #[cfg(target_os = "windows")]
-        let arg_prefix = "-NoProfile -ExecutionPolicy Bypass -Command";
+        let arg_prefix = "/C";
         #[cfg(not(target_os = "windows"))]
         let arg_prefix = "-c";
-        // 构造完整的命令字符串
-        #[cfg(target_os = "windows")]
-        let full_command = format!("\"{}\"", com); // 使用双引号包裹命令以确保正确解析
-        #[cfg(not(target_os = "windows"))]
-        let full_command = com; // 对于非Windows系统，直接使用原始命令
 
         // 构造完整的命令字符串，首先设置代码页为 65001 (UTF-8)，然后执行用户提供的命令
         // 执行命令并获取输出和错误信息
         let output = match Command::new(shell_command)
             .arg(arg_prefix) // 传递参数前缀
-            .arg(&full_command) // 传递命令字符串
+            .arg(&cstring_to_string(command).expect("Invalid command string")) // 传递命令字符串
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .output()
@@ -118,6 +106,7 @@ pub mod utils {
         let stderr_cstring = CString::new(String::from_utf8_lossy(&output.stderr).into_owned()).unwrap_or_else(|_| CString::new("").unwrap());
         let stderr_ptr = stderr_cstring.into_raw();
 
+        // 创建并返回命令执行结果
         CommandResult::new(output.status.success(), stdout_ptr, stderr_ptr)
     }
 
@@ -187,7 +176,7 @@ pub mod utils {
     /// 此外，由于返回的是一个原始指针，使用时需要确保不会造成未定义行为，例如
     /// 解引用悬挂指针等。
     #[no_mangle]
-    pub  fn str_to_cstr(s: String) -> *mut c_char {
+    pub fn str_to_cstr(s: String) -> *mut c_char {
         // 使用 `CString::new` 创建一个新的 C 风格字符串，并自动处理转换过程中的错误。
         let a = CString::new(s).unwrap();
         // 通过 `into_raw` 方法获取原始指针，注意此时所有权转移给了调用者。
@@ -250,4 +239,30 @@ pub mod utils {
             }
         }
     }
+    #[no_mangle]
+#[cfg(target_os = "windows")]
+/// 设置控制台输出代码页为UTF-8 (代码页65001)。
+///
+/// 此函数用于确保控制台输出使用UTF-8编码，从而正确显示多语言字符。
+/// 仅在Windows操作系统上可用，并通过调用Windows API `SetConsoleOutputCP` 实现。
+///
+/// # 安全性
+/// 该函数使用了`unsafe`块来调用外部的Windows API。由于API调用本身是安全的，
+/// 并且没有涉及指针操作或其他不安全行为，因此这里的`unsafe`主要是为了遵循API调用的约定。
+///
+/// # 注意事项
+/// - 仅在目标操作系统为Windows时编译此函数。
+/// - 此函数被标记为`#[no_mangle]`以防止符号名在链接时被修改。
+pub extern "C" fn set_console_output_cp_to_utf8() {
+    unsafe {
+        // 声明外部Windows API函数
+        extern "system" {
+            fn SetConsoleOutputCP(codepage: u32) -> u32;
+        }
+
+        // 调用原始的SetConsoleOutputCP函数，设置为UTF-8 (代码页65001)
+        SetConsoleOutputCP(65001);
+    }
+}
+
 }
