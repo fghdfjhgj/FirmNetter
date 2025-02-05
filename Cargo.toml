@@ -1,6 +1,6 @@
 [package]
 name = "t3_lib_rust"
-version = "0.1.54"
+version = "0.1.6"
 edition = "2021"
 description = "测试，请勿使用！"
 repository = "https://github.com/fghdfjhgj/lib_rust"
