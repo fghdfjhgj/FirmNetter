@@ -28,7 +28,7 @@ pub mod sql {
         kami_if_kami: *const c_char,
     }
     // Diesel 表定义
-    #[doc(hidden)]
+
     table! {
         users (id) {
             id -> Integer,
@@ -40,7 +40,7 @@ pub mod sql {
             kami -> Text,
         }
     }
-    #[doc(hidden)]
+
     table! {
         kami (id) {
             id -> Integer,
@@ -52,7 +52,7 @@ pub mod sql {
 
     #[derive(Insertable)]
     #[diesel(table_name = users)]
-    #[doc(hidden)]
+
     pub struct NewUser<'a> {
         pub name: &'a str,
         pub email: &'a str,
@@ -64,7 +64,7 @@ pub mod sql {
 
     #[derive(Insertable)]
     #[diesel(table_name = kami)]
-    #[doc(hidden)]
+
     pub struct NewKami<'a> {
         pub name: &'a str,
         pub time: &'a str,
