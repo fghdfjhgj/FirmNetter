@@ -1,9 +1,9 @@
 # cbindgen.toml
-language = "C" # 或者 "C++"
+language = "C"
 
+# 控制哪些模块会被包含
 parse = { include = ["t3_lib_rust"] }
 
-
-
+# 设置只包括公共文档（即不包括被标记为 #[doc(hidden)] 的项）
 [documentation]
-include = false
+include = false  # 或者 true，取决于你的需求
