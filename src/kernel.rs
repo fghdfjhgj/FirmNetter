@@ -26,7 +26,17 @@ pub mod kernel {
         // 根据 _h 标志决定是否添加 "-h" 参数
         let b = if _h { "-h" } else { "" };
         // 构建并执行 magisk.exe unpack 命令，返回命令执行的成功状态
-        exec(str_to_cstr(format!("magisk.exe unpack {} {} {}", a, b ,cstring_to_string(file_name).unwrap()))).stdout
+        let a=exec(str_to_cstr(format!("magiskboot unpack {} {} {}", a, b ,cstring_to_string(file_name).unwrap())));
+        match a.success {
+           true => {
+               // 如果命令执行成功，则返回 "OK"
+               a.stderr
+           },
+           false => {
+               // 如果命令执行失败，则返回 "FAIL"
+               a.stderr
+           }
+        }
     }
     #[no_mangle]
     /// 将镜像重新打包
@@ -45,7 +55,17 @@ pub mod kernel {
         // 根据 _n 标志决定是否添加 "-n" 参数
         let a = if _n { "-n" } else { "" };
         // 构建并执行 magisk.exe pack 命令，返回命令执行的成功状态
-        exec(str_to_cstr(format!("magisk.exe pack {} {} {}", a, cstring_to_string(origboot).expect("error"), cstring_to_string(out_file_name).expect("error")))).stdout
+        let a=exec(str_to_cstr(format!("magiskboot repack {} {} {}", a, cstring_to_string(origboot).expect("error"), cstring_to_string(out_file_name).expect("error"))));
+        match a.success {
+           true => {
+               // 如果命令执行成功，则返回 "OK"
+               a.stdout
+           },
+           false => {
+               // 如果命令执行失败，则返回 "FAIL"
+               a.stderr
+           }
+        }
     }
     /// 验证文件完整性
     ///
@@ -69,7 +89,68 @@ pub mod kernel {
     #[no_mangle]
     pub extern "C" fn verify(file: *const c_char, pom: *const c_char) -> *const c_char {
         // 构造并执行验证命令，返回验证结果的标准输出
-        exec(str_to_cstr(format!("magisk.exe pack {} {} ", cstring_to_string(file).expect("error"), cstring_to_string(pom).expect("error")))).stdout
+        let a=exec(str_to_cstr(format!("magiskboot verify {} {} ", cstring_to_string(file).expect("error"), cstring_to_string(pom).expect("error"))));
+        match a.success {
+           true => {
+               // 如果命令执行成功，则返回 "OK"
+               a.stdout
+           },
+           false => {
+               // 如果命令执行失败，则返回 "FAIL"
+               a.stderr
+           }
+        }
+
+    }
+    /// 对图像文件进行签名
+    ///
+    /// 该函数通过调用外部的 `magiskboot` 工具对指定的图像文件进行签名
+    /// 使用 C 型链接规范，防止符号名 mangling，以便在其他语言中调用
+    ///
+    /// # 参数
+    ///
+    /// * `file`: *const c_char - 图像文件的路径
+    /// * `name`: *const c_char - 签名的名称
+    /// * `pem`: *const c_char - PEM 文件路径，包含签名密钥
+    ///
+    /// # 返回
+    ///
+    /// * `*const c_char` - 签名操作的标准输出
+    ///
+    /// # 安全
+    ///
+    /// 调用此函数时需要确保传入的指针有效且可读，否则可能导致未定义行为
+    #[no_mangle]
+    pub extern "C" fn sign_img(file: *const c_char, name: *const c_char, pem: *const c_char) -> *const c_char {
+        // 执行签名命令并返回其标准输出
+        // 使用 `format!` 构建命令字符串，通过 `str_to_cstr` 转换为 C 型字符串
+        // `cstring_to_string` 用于将 C 型字符串转换为 Rust 字符串
+        // `expect` 处理转换时可能发生的错误
+        let a=exec(str_to_cstr(format!("magiskboot sign {} {} {}", cstring_to_string(file).expect("error"), cstring_to_string(name).expect("error"), cstring_to_string(pem).expect("error"))));
+        match a.success {
+           true => {
+               // 如果命令执行成功，则返回 "OK"
+               a.stdout
+           },
+           false => {
+               // 如果命令执行失败，则返回 "FAIL"
+               a.stderr
+           }
+        }
+    }
+    #[no_mangle]
+    pub extern "C" fn extract(payload_bin: *const c_char, partition: *const c_char,  outfile:*const c_char)->*const c_char{
+        let a=exec(str_to_cstr(format!("magiskboot extract {} {} {}", cstring_to_string(payload_bin).expect("error"), cstring_to_string(partition).expect("error"), cstring_to_string(outfile).expect("error"))));
+        match a.success {
+           true => {
+               // 如果命令执行成功，则返回 "OK"
+               a.stdout
+           },
+           false => {
+               // 如果命令执行失败，则返回 "FAIL"
+               a.stderr
+           }
+        }
     }
 
 }
