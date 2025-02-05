@@ -138,9 +138,19 @@ pub mod kernel {
            }
         }
     }
+   /// 使用no_mangle属性以防止名称修饰，确保函数名在外部保持不变
+    /// 使用extern "C"来指定函数的调用约定与C语言兼容
+    /// 这个函数接收三个C风格的字符串指针作为参数，并返回一个C风格的字符串指针
+    /// 参数payload_bin指向一个表示payload二进制文件路径的C风格字符串
+    /// 参数partition指向一个表示分区信息的C风格字符串
+    /// 参数outfile指向一个表示输出文件路径的C风格字符串
+    /// 函数的作用是调用magiskboot工具来提取payload中的特定分区，并将结果保存到输出文件中
+
     #[no_mangle]
     pub extern "C" fn extract(payload_bin: *const c_char, partition: *const c_char,  outfile:*const c_char)->*const c_char{
+        // 构造命令行字符串并执行magiskboot extract命令
         let a=exec(str_to_cstr(format!("magiskboot extract {} {} {}", cstring_to_string(payload_bin).expect("error"), cstring_to_string(partition).expect("error"), cstring_to_string(outfile).expect("error"))));
+        // 根据命令执行结果返回相应的字符串
         match a.success {
            true => {
                // 如果命令执行成功，则返回 "OK"
@@ -150,6 +160,179 @@ pub mod kernel {
                // 如果命令执行失败，则返回 "FAIL"
                a.stderr
            }
+        }
+    }
+    /// 使用no_mangle属性防止符号名称被修改，确保外部调用的一致性
+    /// 使用extern "C"指定函数的调用约定与C语言相同，以便其他语言可以调用此函数
+    #[no_mangle]
+    pub extern "C" fn hexpatch(file: *const c_char, hexpattern1: *const c_char, hexpattern2: *const c_char) -> *const c_char {
+        // 将文件路径和十六进制模式从C字符串转换为Rust字符串，并执行hexpatch命令
+        let a = exec(str_to_cstr(format!("magiskboot hexpatch {} {} {}", cstring_to_string(file).expect("error"), cstring_to_string(hexpattern1).expect("error"), cstring_to_string(hexpattern2).expect("error"))));
+
+        // 根据命令执行结果返回相应的输出
+        match a.success {
+            true => {
+                // 如果命令执行成功，则返回 "OK"
+                a.stdout
+            },
+            false => {
+                // 如果命令执行失败，则返回错误信息
+                a.stderr
+            }
+        }
+    }
+    // 使用no_mangle属性防止符号名称被修改，确保外部C代码可以调用此函数
+    // 使用extern "C"指定函数使用C语言的调用约定
+    /// 增加或修改内核命令行参数
+    ///
+    /// # 参数
+    ///
+    /// * `file` - 指向一个以null结尾的C字符串，表示目标文件路径
+    /// * `commands` - 指向一个以null结尾的C字符串，表示要增加或修改的命令行参数
+    /// * `"patch" `-表示修补boot(命令行参数的示例)
+    /// 这里所有参数都必须带""(引号)
+    /// # 返回
+    ///
+
+    #[no_mangle]
+    pub extern "C" fn incpio(file: *const c_char, commands: *const c_char) -> *const c_char {
+
+        // 构造并执行命令，处理可能的错误
+        let a = exec(str_to_cstr(format!("magiskboot incpio {} {}", cstring_to_string(file).expect("error"), cstring_to_string(commands).expect("error"))));
+
+        // 根据命令执行结果返回相应的值
+        match a.success {
+            true => {
+                // 如果命令执行成功，则返回 "OK"
+                a.stdout
+            },
+            false => {
+                // 如果命令执行失败，则返回错误信息
+                a.stderr
+            }
+        }
+    }
+    /// 使用no_mangle属性以防止名称修饰，确保函数符号在编译后保持原样
+    /// 使用extern "C" ABI标记，使函数能够被C语言代码调用
+    /// 函数dtb用于处理设备树blob（DTB）文件的操作
+    #[no_mangle]
+    pub extern "C" fn dtb (file: *const c_char, action:*const c_char, args: *const c_char)->*const c_char{
+        // 将C字符串参数转换为Rust字符串，并构造magiskboot dtb命令
+        let a=exec(str_to_cstr(format!("magiskboot dtb {} {} {}", cstring_to_string(file).expect("error"), cstring_to_string(action).expect("error"), cstring_to_string(args).expect("error"))));
+        // 根据命令执行结果返回相应的C字符串
+        match a.success {
+           true => {
+               // 如果命令执行成功，则返回 "OK"
+               a.stdout
+           },
+           false => {
+               // 如果命令执行失败，则返回 "FAIL"
+              a.stderr
+           }
+        }
+    }
+    // 导出一个C接口，用于根据条件分割文件
+    #[no_mangle]
+    pub extern "C" fn split(_n:bool, file:*const c_char)->*const c_char{
+        // 根据_n的值构造命令参数，-n表示启用特定模式
+        let b = if _n { "-n" } else { "" };
+        // 构造并执行magiskboot split命令
+        let a=exec(str_to_cstr(format!("magiskboot split {} {} ",b, cstring_to_string(file).expect("error"))));
+        // 根据命令执行结果返回相应的C字符串
+        match a.success {
+            true => {
+                // 如果命令执行成功，则返回 "OK"
+                a.stdout
+            },
+            false => {
+                // 如果命令执行失败，则返回 "FAIL"
+                a.stderr
+            }
+        }
+    }
+    /// 执行hsa1命令的函数
+    ///
+    /// 此函数通过调用外部的`magiskboot`工具来执行`hsa1`命令，该命令的具体逻辑未在代码中展示。
+    /// 主要负责将文件路径从C字符串转换为Rust字符串，执行命令，然后根据命令执行结果返回相应的C字符串。
+    ///
+    /// # 参数
+    /// * `file`: *const c_char - 指向文件路径的C字符串指针
+    ///
+    /// # 返回值
+    /// *const c_char - 指向命令执行结果的C字符串指针，成功时为"OK"，失败时为"FAIL"
+    #[no_mangle]
+    pub extern "C" fn hsa1(file: *const c_char)->*const c_char{
+        // 执行命令并获取结果
+        let a=exec(str_to_cstr(format!("magiskboot hsa1 {} ", cstring_to_string(file).expect("error"))));
+        // 根据命令执行结果返回相应的C字符串
+        match a.success {
+            true => {
+                // 如果命令执行成功，则返回 "OK"
+                a.stdout
+            },
+            false => {
+                // 如果命令执行失败，则返回 "FAIL"
+                a.stderr
+            }
+        }
+    }
+    /// 导出一个名为 magisk_clean 的 C 接口函数，用于执行 Magisk 清理操作
+    #[no_mangle]
+    pub extern "C" fn magisk_clean() -> *const c_char {
+        // 执行 "magiskboot cleanup" 命令，并将结果转换为 C 语言字符串
+        let a = exec(str_to_cstr("magiskboot cleanup".parse().unwrap()));
+
+        // 根据命令执行结果决定返回值
+        match a.success {
+            true => {
+                // 如果命令执行成功，则返回 "OK"
+                a.stdout
+            },
+            false => {
+                // 如果命令执行失败，则返回 "FAIL"
+                a.stderr
+            }
+        }
+    }
+    /// 使用no_mangle属性以防止名称修饰，确保函数名在外部保持不变
+    /// 使用extern "C"来指定函数的调用约定与C语言兼容
+    /// 这个函数用于解压缩文件，接受输入文件和输出文件的路径作为参数
+    /// 返回一个指向C类型字符串的指针，表示操作结果
+    #[no_mangle]
+    pub extern "C" fn decompress(infile: *const c_char, outfile: *const c_char)->*const c_char{
+        // 构造并执行解压缩命令
+        let a=exec(str_to_cstr(format!("magiskboot decompress {} {} ", cstring_to_string(infile).expect("error"), cstring_to_string(outfile).expect("error"))));
+        // 根据命令执行结果返回相应的字符串
+        match a.success {
+            true => {
+                // 如果命令执行成功，则返回 "OK"
+                a.stdout
+            },
+            false => {
+                // 如果命令执行失败，则返回 "FAIL"
+                a.stderr
+            }
+        }
+    }
+    /// 使用no_mangle属性以防止名称修饰，确保函数名在外部保持不变
+    /// 使用extern "C"来指定函数的调用约定与C语言兼容
+    /// 这个函数用于压缩文件，接受三个参数：压缩类型、输入文件和输出文件
+    /// 返回一个指向C风格字符串的指针，表示操作结果
+    #[no_mangle]
+    pub extern "C" fn compress(zip: *const c_char, infile: *const c_char, outfile: *const c_char) -> *const c_char {
+        // 构造压缩命令并执行
+        let a = exec(str_to_cstr(format!("magiskboot compress={} {} {} ", cstring_to_string(zip).expect("error"), cstring_to_string(infile).expect("error"), cstring_to_string(outfile).expect("error"))));
+
+        // 根据命令执行结果返回相应的字符串
+        match a.success {
+            true => {
+                // 如果命令执行成功，则返回 "OK"
+                a.stdout
+            },
+            false => {
+                // 如果命令执行失败，则返回 "FAIL"
+                a.stderr
+            }
         }
     }
 
