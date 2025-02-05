@@ -1,7 +1,9 @@
 # cbindgen.toml
 language = "C" # 或者 "C++"
-include_guard = "tool"
 
-[parse]
-parse_deps = true
-include = ["my_crate"]
+parse = { include = ["t3_lib_rust"] }
+
+fn = { exclude = ["internal::new", "internal::free"] }
+
+[documentation]
+include = "Public"
