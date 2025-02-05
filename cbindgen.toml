@@ -1,0 +1,7 @@
+# cbindgen.toml
+language = "C" # 或者 "C++"
+include_guard = "tool"
+
+[parse]
+parse_deps = true
+include = ["my_crate"]

@@ -43,7 +43,7 @@ pub mod flash_phone {
         /// 指向表示内核QEMU标志的字符字符串的指针。
         ro_kernel_qemu: *const c_char,
     }
-
+    #[doc(hidden)]
     impl NoRootPhoneData {
         /// 创建一个新的NoRootPhoneData实例
         ///
@@ -52,6 +52,7 @@ pub mod flash_phone {
         ///
         /// 返回值:
         /// 返回一个NoRootPhoneData实例，其中所有字段都被初始化为null
+          #[doc(hidden)]
         fn new() -> NoRootPhoneData {
             NoRootPhoneData {
                 kernel_version: ptr::null(),
@@ -82,6 +83,7 @@ pub mod flash_phone {
     /// # 参数
     ///
     /// * `data` - 一个可变引用，指向 NoRootPhoneData 结构体。这个结构体包含了多个指向 C 语言字符串的指针
+    #[no_mangle]
     pub extern "C" fn free_no_root_phone_data(data: &mut NoRootPhoneData) {
         // 在 Rust 中，使用裸指针和直接内存管理相关的操作被认为是不安全的
         // 因此，我们需要在一个 unsafe 块中执行这些操作
@@ -205,7 +207,9 @@ pub mod flash_phone {
     }
 
     /// 执行Fastboot命令
-    fn execute_fastboot_command(id: *const c_char, command:*const c_char,parameter:*const c_char) -> *const c_char {
+
+    #[doc(hidden)]
+    pub fn execute_fastboot_command(id: *const c_char, command:*const c_char,parameter:*const c_char) -> *const c_char {
         let res = exec(str_to_cstr(format!("fastboot -s {} {} {}", cstring_to_string(id).expect("error"), cstring_to_string(command).expect("error"), cstring_to_string(parameter).expect("error"))));
         let result = if res.success {
             res.stdout
@@ -254,8 +258,9 @@ pub mod flash_phone {
             str_to_cstr(cstring_to_string(res.stderr).expect("Failed to convert stdout"))
         }
     }
+    #[doc(hidden)]
 
-    fn execute_adb_command(id: *const c_char, command: *const c_char,parameter:*const c_char) -> *const c_char {
+   pub fn execute_adb_command(id: *const c_char, command: *const c_char,parameter:*const c_char) -> *const c_char {
         let res = exec(str_to_cstr(format!("adb -s  {}  {}  {}", cstring_to_string(id).expect("error"), cstring_to_string(command).expect("error"), cstring_to_string(parameter).expect("error"))));
         let result = if res.success {
             res.stdout
