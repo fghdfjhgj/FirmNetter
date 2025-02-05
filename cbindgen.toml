@@ -3,7 +3,7 @@ language = "C" # 或者 "C++"
 
 parse = { include = ["t3_lib_rust"] }
 
-fn = { exclude = ["internal::new", "internal::free"] }
+
 
 [documentation]
-include = "Public"
+include = false
