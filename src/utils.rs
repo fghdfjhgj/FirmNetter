@@ -1,9 +1,12 @@
 pub mod utils {
-
     use std::ffi::{c_char, CStr, CString};
     use std::process::{Command, Stdio};
+    use std::sync::{mpsc, Arc, Mutex};
     use std::time::{SystemTime, UNIX_EPOCH};
-    use std::{fs, ptr};
+    use std::{fs, ptr, thread};
+    use std::marker::PhantomData;
+    use std::sync::mpsc::{Receiver, Sender};
+
     /// 定义一个对外的 C 接口，执行外部命令
     /// 该接口使用原始指针和长度来传递命令字符串，以适应 C 语言的调用习惯
     #[repr(C)]
@@ -286,5 +289,91 @@ pub extern "C" fn set_console_output_cp_to_utf8() {
         // 使用lines方法按行分隔字符串，然后使用map方法将每一行转换为String类型，最后收集到一个Vec中
         text.lines().map(String::from).collect()
     }
+    type Job<R> = Box<dyn FnOnce() -> R + Send>;
 
+    enum Message<R> {
+        NewJob(Job<R>, Sender<R>),
+        Terminate,
+    }
+
+    struct Worker<T, R> {
+        id: usize,
+        thread: Option<thread::JoinHandle<()>>,
+        _phantom: PhantomData<(T, R)>,
+    }
+
+    impl<T, R> Worker<T, R>
+    where
+        T: Send + 'static,
+        R: Send + 'static,
+    {
+        fn new(id: usize, receiver: Arc<Mutex<Receiver<Message<R>>>>) -> Worker<T, R> {
+            let thread = thread::spawn(move || loop {
+                let message = receiver.lock().unwrap().recv().unwrap();
+
+                match message {
+                    Message::NewJob(job, tx) => {
+                        let result = job(); // 直接调用闭包，没有参数
+                        tx.send(result).expect("Failed to send result");
+                    },
+                    Message::Terminate => break,
+                }
+            });
+
+            Worker {
+                id,
+                thread: Some(thread),
+                _phantom: PhantomData,
+            }
+        }
+    }
+
+    pub struct ThreadPool<T, R> {
+        workers: Vec<Worker<T, R>>,
+        sender: Sender<Message<R>>,
+    }
+
+    impl<T, R> ThreadPool<T, R>
+    where
+        T: Send + 'static,
+        R: Send + 'static,
+    {
+        pub fn new(size: usize) -> ThreadPool<T, R> {
+            assert!(size > 0);
+
+            let (sender, receiver) = mpsc::channel();
+            let receiver = Arc::new(Mutex::new(receiver));
+            let mut workers = Vec::with_capacity(size);
+
+            for id in 0..size {
+                workers.push(Worker::new(id, Arc::clone(&receiver)));
+            }
+
+            ThreadPool { workers, sender }
+        }
+
+        pub fn submit<F>(&self, task: F, arg: T) -> Receiver<R>
+        where
+            F: FnOnce(T) -> R + Send + 'static,
+        {
+            let (tx, rx) = mpsc::channel();
+            let job = Box::new(move || task(arg)); // 创建一个闭包，它捕获了 `arg` 并在调用时使用它
+            self.sender.send(Message::NewJob(job, tx)).unwrap();
+            rx
+        }
+    }
+
+    impl<T, R> Drop for ThreadPool<T, R> {
+        fn drop(&mut self) {
+            for _ in &mut self.workers {
+                self.sender.send(Message::Terminate).unwrap();
+            }
+
+            for worker in &mut self.workers {
+                if let Some(thread) = worker.thread.take() {
+                    thread.join().unwrap();
+                }
+            }
+        }
+    }
 }
