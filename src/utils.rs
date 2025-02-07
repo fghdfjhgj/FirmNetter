@@ -313,7 +313,7 @@ pub extern "C" fn set_console_output_cp_to_utf8() {
 
                 match message {
                     Message::NewJob(job, tx) => {
-                        let result = job(); // 直接调用闭包，没有参数
+                        let result = job();
                         tx.send(result).expect("Failed to send result");
                     },
                     Message::Terminate => break,
@@ -357,7 +357,8 @@ pub extern "C" fn set_console_output_cp_to_utf8() {
             F: FnOnce(T) -> R + Send + 'static,
         {
             let (tx, rx) = mpsc::channel();
-            let job = Box::new(move || task(arg)); // 创建一个闭包，它捕获了 `arg` 并在调用时使用它
+            // 创建一个新的闭包，该闭包捕获了 `task` 和 `arg`
+            let job = Box::new(move || task(arg));
             self.sender.send(Message::NewJob(job, tx)).unwrap();
             rx
         }
@@ -375,5 +376,4 @@ pub extern "C" fn set_console_output_cp_to_utf8() {
                 }
             }
         }
-    }
-}
+    }}
