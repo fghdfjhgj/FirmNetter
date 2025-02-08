@@ -15,15 +15,14 @@ pub mod utils {
         pub stdout: *mut c_char,
         pub stderr: *mut c_char,
     }
-    #[doc(hidden)]
     impl CommandResult {
-        #[doc(hidden)]
+
         fn new(success: bool, stdout: *mut c_char, stderr: *mut c_char) -> Self {
             CommandResult { success, stdout, stderr }
         }
 
         // 提供一个方法来安全地释放由 CommandResult 包含的 C 字符串
-        #[doc(hidden)]
+
         pub fn free(&self) {
             unsafe {
                 if !self.stdout.is_null() {
@@ -51,7 +50,7 @@ pub mod utils {
     ///
     /// 该函数使用了 `unsafe` 块来进行裸指针操作。调用者必须确保传入的指针是有效的，并且指向一个以空字符结尾的 C 风格字符串。如果指针为空，函数将安全地返回一个空字符串。
 
-    #[doc(hidden)]
+
     pub fn cstring_to_string(s: *const c_char) -> Result<String, std::str::Utf8Error> {
         unsafe {
             if s.is_null() {
@@ -182,7 +181,7 @@ pub mod utils {
     /// 此外，由于返回的是一个原始指针，使用时需要确保不会造成未定义行为，例如
     /// 解引用悬挂指针等。
 
-    #[doc(hidden)]
+
     pub fn str_to_cstr(s: String) -> *mut c_char {
         // 使用 `CString::new` 创建一个新的 C 风格字符串，并自动处理转换过程中的错误。
         let a = CString::new(s).unwrap();
@@ -284,7 +283,7 @@ pub extern "C" fn set_console_output_cp_to_utf8() {
     ///
     /// 返回一个`Vec<String>`，其中每个元素都是原字符串中的一行
     ///
-    #[doc(hidden)]
+
     pub fn split_by_newline(text: &str) -> Vec<String> {
         // 使用lines方法按行分隔字符串，然后使用map方法将每一行转换为String类型，最后收集到一个Vec中
         text.lines().map(String::from).collect()
