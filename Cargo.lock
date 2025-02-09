@@ -1288,6 +1288,8 @@ dependencies = [
  "dotenv",
  "libc",
  "reqwest",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

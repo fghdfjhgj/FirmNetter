@@ -2,6 +2,7 @@ pub mod flash_phone {
     use crate::utils;
     use std::ffi::{c_char, CString};
     use std::ptr;
+    use serde::{Deserialize, Serialize};
     use utils::utils::*;
 
     /// 表示没有root权限的Android手机信息。
@@ -11,6 +12,7 @@ pub mod flash_phone {
     /// 便于Rust与C代码之间的互操作，特别是在访问Android的原生API时非常有用。
     ///
     #[repr(C)]
+    #[derive(Serialize, Deserialize)]
     pub struct NoRootPhoneData {
         /// 指向表示Android内核版本的字符字符串的指针。
         kernel_version: *const c_char,
@@ -113,6 +115,7 @@ pub mod flash_phone {
     }
 
     #[repr(C)]
+    #[derive(Serialize, Deserialize)]
     pub struct RootPhoneData {
         root_ro_serialno: *const c_char,
     }

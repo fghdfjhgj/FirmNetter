@@ -6,10 +6,12 @@ pub mod utils {
     use std::{fs, ptr, thread};
     use std::marker::PhantomData;
     use std::sync::mpsc::{Receiver, Sender};
+    use serde::{Deserialize, Serialize};
 
     /// 定义一个对外的 C 接口，执行外部命令
     /// 该接口使用原始指针和长度来传递命令字符串，以适应 C 语言的调用习惯
     #[repr(C)]
+    #[derive(Serialize, Deserialize)]
     pub struct CommandResult {
         pub success: bool,
         pub stdout: *mut c_char,
