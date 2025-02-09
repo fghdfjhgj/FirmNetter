@@ -17,7 +17,6 @@ reqwest = { version = "0.12.12" ,features = ["blocking"] }
 diesel = { version = "2.0.0", features = ["postgres"] }
 dotenv = "0.15.0"
 libc = "0.2.169"
-serde = { version = "1.0", features = ["derive"] }
 
 [build-dependencies]
 cbindgen = "0.28.0"
