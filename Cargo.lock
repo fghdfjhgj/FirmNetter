@@ -1281,14 +1281,13 @@ dependencies = [
 
 [[package]]
 name = "t3_lib_rust"
-version = "0.1.65"
+version = "0.1.66"
 dependencies = [
  "cbindgen",
  "diesel",
  "dotenv",
  "libc",
  "reqwest",
- "serde",
 ]
 
 [[package]]
