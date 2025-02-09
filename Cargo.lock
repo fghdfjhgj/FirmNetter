@@ -1289,7 +1289,6 @@ dependencies = [
  "libc",
  "reqwest",
  "serde",
- "serde_json",
 ]
 
 [[package]]
