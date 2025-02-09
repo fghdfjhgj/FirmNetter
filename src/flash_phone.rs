@@ -2,7 +2,6 @@ pub mod flash_phone {
     use crate::utils;
     use std::ffi::{c_char, CString};
     use std::ptr;
-    use serde::{Deserialize, Serialize};
     use utils::utils::*;
 
     /// 表示没有root权限的Android手机信息。
@@ -12,38 +11,37 @@ pub mod flash_phone {
     /// 便于Rust与C代码之间的互操作，特别是在访问Android的原生API时非常有用。
     ///
     #[repr(C)]
-    #[derive(Serialize, Deserialize)]
     pub struct NoRootPhoneData {
         /// 指向表示Android内核版本的字符字符串的指针。
-        kernel_version: *const c_char,
+        pub kernel_version: *const c_char,
         /// 指向表示Android版本的字符字符串的指针。
-        android_version: *const c_char,
+        pub  android_version: *const c_char,
         /// 指向表示Android SDK版本的字符字符串的指针。
-        sdk_version: *const c_char,
+        pub sdk_version: *const c_char,
         /// 指向表示产品制造商的字符字符串的指针。
-        ro_product_manufacturer: *const c_char,
+        pub ro_product_manufacturer: *const c_char,
         /// 指向表示产品CPU ABI（应用程序二进制接口）的字符字符串的指针。
-        ro_cpu_abi: *const c_char,
+        pub ro_cpu_abi: *const c_char,
         /// 指向表示产品品牌的字符字符串的指针。
-        ro_product_brand: *const c_char,
+        pub  ro_product_brand: *const c_char,
         /// 指向表示产品型号的字符字符串的指针。
-        ro_product_model: *const c_char,
+        pub ro_product_model: *const c_char,
         /// 指向表示产品设备名称的字符字符串的指针。
-        ro_product_device: *const c_char,
+        pub ro_product_device: *const c_char,
         /// 指向表示硬件名称的字符字符串的指针。
-        ro_hardware: *const c_char,
+        pub  ro_hardware: *const c_char,
         /// 指向表示构建描述的字符字符串的指针。
-        ro_build_description: *const c_char,
+        pub ro_build_description: *const c_char,
         /// 指向表示安全补丁版本的字符字符串的指针。
-        ro_build_version_security_patch: *const c_char,
+        pub ro_build_version_security_patch: *const c_char,
         /// 指向表示构建ID的字符字符串的指针。
-        ro_build_id: *const c_char,
+        pub ro_build_id: *const c_char,
         /// 指向表示引导加载程序版本的字符字符串的指针。
-        ro_bootloader: *const c_char,
+        pub ro_bootloader: *const c_char,
         /// 指向表示调制解调器软件版本的字符字符串的指针。
-        ro_modem_software_version: *const c_char,
+        pub ro_modem_software_version: *const c_char,
         /// 指向表示内核QEMU标志的字符字符串的指针。
-        ro_kernel_qemu: *const c_char,
+        pub ro_kernel_qemu: *const c_char,
     }
 
     impl NoRootPhoneData {
@@ -115,9 +113,8 @@ pub mod flash_phone {
     }
 
     #[repr(C)]
-    #[derive(Serialize, Deserialize)]
     pub struct RootPhoneData {
-        root_ro_serialno: *const c_char,
+        pub root_ro_serialno: *const c_char,
     }
 
     /// 获取非root手机数据

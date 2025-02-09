@@ -8,27 +8,24 @@ pub mod sql {
     use std::ffi::{CStr, CString};
     use std::sync::{Arc, Mutex};
     use std::{env, ptr};
-    use serde::{Deserialize, Serialize};
 
     #[repr(C)]
-    #[derive(Serialize, Deserialize)]
     pub struct UserData {
-        user_id: i32,
-        user_name: *const c_char,      // 使用 C 字符串指针
-        user_email: *const c_char,     // 使用 C 字符串指针
-        user_password: *const c_char,  // 使用 C 字符串指针
-        user_ip: *const c_char,        // 使用 C 字符串指针
-        user_imei: *const c_char,      // 使用 C 字符串指针
-        user_kami: *const c_char,
+        pub user_id: i32,
+        pub user_name: *const c_char,      // 使用 C 字符串指针
+        pub user_email: *const c_char,     // 使用 C 字符串指针
+        pub user_password: *const c_char,  // 使用 C 字符串指针
+        pub user_ip: *const c_char,        // 使用 C 字符串指针
+        pub user_imei: *const c_char,      // 使用 C 字符串指针
+        pub user_kami: *const c_char,
     }
 
     #[repr(C)]
-    #[derive(Serialize, Deserialize)]
     pub struct KamiData {
-        kami_id: i32,
-        kami_name: *const c_char,      // 使用 C 字符串指针
-        kami_time: *const c_char,                // 使用时间戳 (秒)
-        kami_if_kami: *const c_char,
+        pub kami_id: i32,
+        pub kami_name: *const c_char,      // 使用 C 字符串指针
+        pub kami_time: *const c_char,                // 使用时间戳 (秒)
+        pub kami_if_kami: *const c_char,
     }
     // Diesel 表定义
 
@@ -55,7 +52,7 @@ pub mod sql {
 
     #[derive(Insertable)]
     #[diesel(table_name = users)]
-    #[derive(Serialize, Deserialize)]
+
     pub struct NewUser<'a> {
         pub name: &'a str,
         pub email: &'a str,
@@ -67,7 +64,7 @@ pub mod sql {
 
     #[derive(Insertable)]
     #[diesel(table_name = kami)]
-    #[derive(Serialize, Deserialize)]
+
     pub struct NewKami<'a> {
         pub name: &'a str,
         pub time: &'a str,
@@ -76,9 +73,8 @@ pub mod sql {
 
     // 定义一个持有数据库连接的结构体
     #[repr(C)]
-    #[derive(Serialize, Deserialize)]
     pub struct Database {
-        conn: Arc<Mutex<PgConnection>>,
+        pub conn: Arc<Mutex<PgConnection>>,
     }
 
     /// 建立到 PostgresSQL 数据库的连接。
