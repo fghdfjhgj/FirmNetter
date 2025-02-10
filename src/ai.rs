@@ -3,9 +3,8 @@ pub mod ai {
     use crate::utils::utils::str_to_cstr;
     use futures_util::stream::StreamExt;
     use reqwest::Client;
-    use serde_json::json;
-    use std::ffi::{c_char, c_float, c_int};
     use serde::{Deserialize, Serialize};
+    use std::ffi::{c_char, c_float, c_int};
 
     // 用于处理流式数据
     #[derive(Serialize, Deserialize, Debug)]
@@ -18,6 +17,12 @@ pub mod ai {
     struct ChatRequest {
         model: String,
         messages: Vec<ChatMessage>,
+        temperature: f32,
+        max_tokens: i32,
+        top_p: f32,
+        n: i32,
+        stop: String,
+        stream: bool,
     }
 
     #[derive(Deserialize, Debug)]
@@ -46,54 +51,45 @@ pub mod ai {
     ///
     /// # 返回值
     /// - 返回指向C字符串的指针，表示API的响应结果或错误信息。
-    #[no_mangle]
-    pub extern "C" fn get_ai_no_stream(url: *const c_char,
-                                             api_key: *const c_char,
-                                             model: *const c_char,
-                                             role: *const c_char,
-                                             content: *const c_char,
-                                             temperature: c_float,
-                                             max_tokens: c_int,
-                                             top_p: c_float,
-                                             n: c_int,
-                                             stop: *const c_char) -> *const c_char {
-        // 将C字符串转换为Rust字符串，并处理可能的转换失败
-        let url_str = cstring_to_string(url).expect("Failed to convert C string");
-        let api_key_str = cstring_to_string(api_key).expect("Failed to convert C string");
-        let model_str = cstring_to_string(model).expect("Failed to convert C string");
-        let role_str = cstring_to_string(role).expect("Failed to convert C string");
-        let content_str = cstring_to_string(content).expect("Failed to convert C string");
-        let stop_str = cstring_to_string(stop).expect("Failed to convert C string");
-
+    pub async fn get_ai_no_stream(url: &str,
+                                 api_key: &str,
+                                 model: &str,
+                                 role: &str,
+                                 content: &str,
+                                 temperature: f32,
+                                 max_tokens: i32,
+                                 top_p: f32,
+                                 n: i32,
+                                 stop: &str) -> Result<String, Box<dyn std::error::Error>> {
         // 构建JSON请求体
-        let json_data = json!({
-            "model": model_str,
-            "messages": [
-                {"role": role_str, "content": content_str}
-            ],
-            "temperature": temperature,
-            "max_tokens": max_tokens,
-            "top_p": top_p,
-            "n": n,
-            "stop": stop_str,
-            "stream": false
-        });
+        let json_data = ChatRequest {
+            model: model.to_string(),
+            messages: vec![ChatMessage {
+                role: role.to_string(),
+                content: content.to_string(),
+            }],
+            temperature,
+            max_tokens,
+            top_p,
+            n,
+            stop: stop.to_string(),
+            stream: false,
+        };
 
         // 创建HTTP客户端并发送POST请求
         let client = Client::new();
         let res = client
-            .post(url_str)
-            .header("Authorization", format!("Bearer {}", api_key_str))
+            .post(url)
+            .header("Authorization", format!("Bearer {}", api_key))
             .json(&json_data)
             .send()
-
-            .expect("Failed to send request");
+            .await?;
 
         // 处理响应结果
         if res.status().is_success() {
-            str_to_cstr(res.text().expect("Failed to get response text"))
+            Ok(res.text().await?)
         } else {
-            str_to_cstr("Failed to send request".parse().unwrap())
+            Err(format!("Request failed: {}", res.status()).into())
         }
     }
 
@@ -114,18 +110,19 @@ pub mod ai {
         stop: &str,
     ) -> Result<String, Box<dyn std::error::Error>> {
         // 构建JSON请求体
-        let json_data = json!({
-            "model": model,
-            "messages": [
-                {"role": role, "content": content}
-            ],
-            "temperature": temperature,
-            "max_tokens": max_tokens,
-            "top_p": top_p,
-            "n": n,
-            "stop": stop,
-            "stream": true // 启用流式传输
-        });
+        let json_data = ChatRequest {
+            model: model.to_string(),
+            messages: vec![ChatMessage {
+                role: role.to_string(),
+                content: content.to_string(),
+            }],
+            temperature,
+            max_tokens,
+            top_p,
+            n,
+            stop: stop.to_string(),
+            stream: true, // 启用流式传输
+        };
 
         // 创建HTTP客户端
         let client = Client::new();
@@ -203,6 +200,51 @@ pub mod ai {
         let rt = tokio::runtime::Runtime::new().expect("Failed to create Tokio runtime");
         let result = rt.block_on(async {
             get_ai_stream(
+                &url_str,
+                &api_key_str,
+                &model_str,
+                &role_str,
+                &content_str,
+                temperature,
+                max_tokens,
+                top_p,
+                n,
+                &stop_str,
+            ).await
+        });
+
+        // 根据异步任务的结果返回相应的 C 字符串
+        match result {
+            Ok(result) => str_to_cstr(result),
+            Err(_) => str_to_cstr("Failed to send request".parse().unwrap()),
+        }
+    }
+
+    #[no_mangle]
+    pub extern "C" fn C_get_ai_no_stream(
+        url: *const c_char,
+        api_key: *const c_char,
+        model: *const c_char,
+        role: *const c_char,
+        content: *const c_char,
+        temperature: c_float,
+        max_tokens: c_int,
+        top_p: c_float,
+        n: c_int,
+        stop: *const c_char,
+    ) -> *const c_char {
+        // 将 C 字符串参数转换为 Rust 字符串
+        let url_str = cstring_to_string(url).expect("Failed to convert C string");
+        let api_key_str = cstring_to_string(api_key).expect("Failed to convert C string");
+        let model_str = cstring_to_string(model).expect("Failed to convert C string");
+        let role_str = cstring_to_string(role).expect("Failed to convert C string");
+        let content_str = cstring_to_string(content).expect("Failed to convert C string");
+        let stop_str = cstring_to_string(stop).expect("Failed to convert C string");
+
+        // 创建并启动 Tokio 运行时以执行异步任务
+        let rt = tokio::runtime::Runtime::new().expect("Failed to create Tokio runtime");
+        let result = rt.block_on(async {
+            get_ai_no_stream(
                 &url_str,
                 &api_key_str,
                 &model_str,
