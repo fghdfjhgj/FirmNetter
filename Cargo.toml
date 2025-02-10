@@ -19,7 +19,8 @@ dotenv = "0.15.0"
 libc = "0.2.169"
 serde = { version = "1.0.217", features = ["derive"] }
 serde_json= "1.0.79"
-tokio= { version = "1.28.0", features = ["full"] }
+futures-util = "0.3.31"
+tokio = { version = "1.43.0", features = ["rt-multi-thread"] }
 
 [build-dependencies]
 cbindgen = "0.28.0"
