@@ -8,7 +8,7 @@ pub mod web {
     use crate::utils::utils::cstring_to_string;
     // 定义一个不会被 Rust 编译器重命名的外部函数，以便与 C 代码互操作
     #[no_mangle]
-    extern "C" fn web_get(url: *const c_char) -> *const c_char {
+   pub extern "C" fn web_get(url: *const c_char) -> *const c_char {
         // 将传入的指针转换为字符串
         let url_str = cstring_to_string(url).expect("Failed to convert C string");
         // 创建一个新的 HTTP 客户端
@@ -38,7 +38,7 @@ pub mod web {
     }
     // 定义一个对外的 C 接口，用于执行 HTTP POST 请求
     #[no_mangle]
-    extern "C" fn web_post(url: *const c_char,  data: *const c_char) -> *const c_char {
+    pub extern "C" fn web_post(url: *const c_char,  data: *const c_char) -> *const c_char {
         // 将 URL 的指针和长度转换为字符串
         let url_str = cstring_to_string(url).expect("Failed to convert C string");
         // 将请求数据的指针和长度转换为字符串

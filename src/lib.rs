@@ -2,6 +2,8 @@ pub mod utils;
 pub use utils::utils as other_utils;
 pub mod web;
 pub mod flash_phone;
+pub mod ai;
+pub use ai::ai as other_ai ;
 pub mod sql;
 mod kernel;
 pub use kernel::kernel as other_kernel ;
