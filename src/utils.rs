@@ -78,6 +78,7 @@ pub mod utils {
     /// 返回一个 `CommandResult` 结构体，包含命令执行的结果。
     #[no_mangle]
     pub extern "C" fn exec(command: *const c_char) -> CommandResult {
+        set_console_output_cp_to_utf8();
         // 根据目标操作系统选择合适的 shell 命令
         #[cfg(target_os = "windows")]
         let shell_command = "cmd";
@@ -95,6 +96,7 @@ pub mod utils {
         let output = match Command::new(shell_command)
             .arg(arg_prefix) // 传递参数前缀
             .arg(&cstring_to_string(command).expect("Invalid command string")) // 传递命令字符串
+            .creation_flags(0x08000000)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .output()
