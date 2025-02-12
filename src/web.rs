@@ -10,7 +10,7 @@ pub mod web {
     #[no_mangle]
    pub extern "C" fn web_get(url: *const c_char) -> *const c_char {
         // 将传入的指针转换为字符串
-        let url_str = cstring_to_string(url).expect("Failed to convert C string");
+        let url_str = cstring_to_string(url);
         // 创建一个新的 HTTP 客户端
         let client = Client::new();
         // 发送 GET 请求并处理结果
@@ -40,9 +40,9 @@ pub mod web {
     #[no_mangle]
     pub extern "C" fn web_post(url: *const c_char,  data: *const c_char) -> *const c_char {
         // 将 URL 的指针和长度转换为字符串
-        let url_str = cstring_to_string(url).expect("Failed to convert C string");
+        let url_str = cstring_to_string(url);
         // 将请求数据的指针和长度转换为字符串
-        let data_str = cstring_to_string(data).expect("Failed to convert C string");
+        let data_str = cstring_to_string(data);
         // 创建一个新的 HTTP 客户端
 
         // 发送 POST 请求并处理响应
@@ -79,8 +79,8 @@ pub mod web {
     #[no_mangle]
     pub extern "C" fn downloader(url: *const c_char, file_name: *const c_char) -> *const c_char {
         // 将 URL 和文件名的指针转换为字符串
-        let url = cstring_to_string(url).expect("Failed to convert C string");
-        let file_name = cstring_to_string(file_name).expect("Failed to convert C string");
+        let url = cstring_to_string(url);
+        let file_name = cstring_to_string(file_name);
 
         // 发送 GET 请求
         let response = get(&url);

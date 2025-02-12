@@ -26,7 +26,7 @@ pub mod kernel {
         // 根据 _h 标志决定是否添加 "-h" 参数
         let b = if _h { "-h" } else { "" };
         // 构建并执行 magisk.exe unpack 命令，返回命令执行的成功状态
-        let a=exec(str_to_cstr(format!("magiskboot unpack {} {} {}", a, b ,cstring_to_string(file_name).unwrap())));
+        let a=exec(str_to_cstr(format!("magiskboot unpack {} {} {}", a, b ,cstring_to_string(file_name))));
         match a.success {
            true => {
                // 如果命令执行成功，则返回 "OK"
@@ -55,7 +55,7 @@ pub mod kernel {
         // 根据 _n 标志决定是否添加 "-n" 参数
         let a = if _n { "-n" } else { "" };
         // 构建并执行 magisk.exe pack 命令，返回命令执行的成功状态
-        let a=exec(str_to_cstr(format!("magiskboot repack {} {} {}", a, cstring_to_string(origboot).expect("error"), cstring_to_string(out_file_name).expect("error"))));
+        let a=exec(str_to_cstr(format!("magiskboot repack {} {} {}", a, cstring_to_string(origboot), cstring_to_string(out_file_name))));
         match a.success {
            true => {
                // 如果命令执行成功，则返回 "OK"
@@ -89,7 +89,7 @@ pub mod kernel {
     #[no_mangle]
     pub extern "C" fn verify(file: *const c_char, pom: *const c_char) -> *const c_char {
         // 构造并执行验证命令，返回验证结果的标准输出
-        let a=exec(str_to_cstr(format!("magiskboot verify {} {} ", cstring_to_string(file).expect("error"), cstring_to_string(pom).expect("error"))));
+        let a=exec(str_to_cstr(format!("magiskboot verify {} {} ", cstring_to_string(file), cstring_to_string(pom))));
         match a.success {
            true => {
                // 如果命令执行成功，则返回 "OK"
@@ -126,7 +126,7 @@ pub mod kernel {
         // 使用 `format!` 构建命令字符串，通过 `str_to_cstr` 转换为 C 型字符串
         // `cstring_to_string` 用于将 C 型字符串转换为 Rust 字符串
         // `expect` 处理转换时可能发生的错误
-        let a=exec(str_to_cstr(format!("magiskboot sign {} {} {}", cstring_to_string(file).expect("error"), cstring_to_string(name).expect("error"), cstring_to_string(pem).expect("error"))));
+        let a=exec(str_to_cstr(format!("magiskboot sign {} {} {}", cstring_to_string(file), cstring_to_string(name), cstring_to_string(pem))));
         match a.success {
            true => {
                // 如果命令执行成功，则返回 "OK"
@@ -149,7 +149,7 @@ pub mod kernel {
     #[no_mangle]
     pub extern "C" fn extract(payload_bin: *const c_char, partition: *const c_char,  outfile:*const c_char)->*const c_char{
         // 构造命令行字符串并执行magiskboot extract命令
-        let a=exec(str_to_cstr(format!("magiskboot extract {} {} {}", cstring_to_string(payload_bin).expect("error"), cstring_to_string(partition).expect("error"), cstring_to_string(outfile).expect("error"))));
+        let a=exec(str_to_cstr(format!("magiskboot extract {} {} {}", cstring_to_string(payload_bin), cstring_to_string(partition), cstring_to_string(outfile))));
         // 根据命令执行结果返回相应的字符串
         match a.success {
            true => {
@@ -167,7 +167,7 @@ pub mod kernel {
     #[no_mangle]
     pub extern "C" fn hexpatch(file: *const c_char, hexpattern1: *const c_char, hexpattern2: *const c_char) -> *const c_char {
         // 将文件路径和十六进制模式从C字符串转换为Rust字符串，并执行hexpatch命令
-        let a = exec(str_to_cstr(format!("magiskboot hexpatch {} {} {}", cstring_to_string(file).expect("error"), cstring_to_string(hexpattern1).expect("error"), cstring_to_string(hexpattern2).expect("error"))));
+        let a = exec(str_to_cstr(format!("magiskboot hexpatch {} {} {}", cstring_to_string(file), cstring_to_string(hexpattern1), cstring_to_string(hexpattern2))));
 
         // 根据命令执行结果返回相应的输出
         match a.success {
@@ -198,7 +198,7 @@ pub mod kernel {
     pub extern "C" fn incpio(file: *const c_char, commands: *const c_char) -> *const c_char {
 
         // 构造并执行命令，处理可能的错误
-        let a = exec(str_to_cstr(format!("magiskboot incpio {} {}", cstring_to_string(file).expect("error"), cstring_to_string(commands).expect("error"))));
+        let a = exec(str_to_cstr(format!("magiskboot incpio {} {}", cstring_to_string(file), cstring_to_string(commands))));
 
         // 根据命令执行结果返回相应的值
         match a.success {
@@ -218,7 +218,7 @@ pub mod kernel {
     #[no_mangle]
     pub extern "C" fn dtb (file: *const c_char, action:*const c_char, args: *const c_char)->*const c_char{
         // 将C字符串参数转换为Rust字符串，并构造magiskboot dtb命令
-        let a=exec(str_to_cstr(format!("magiskboot dtb {} {} {}", cstring_to_string(file).expect("error"), cstring_to_string(action).expect("error"), cstring_to_string(args).expect("error"))));
+        let a=exec(str_to_cstr(format!("magiskboot dtb {} {} {}", cstring_to_string(file), cstring_to_string(action), cstring_to_string(args))));
         // 根据命令执行结果返回相应的C字符串
         match a.success {
            true => {
@@ -237,7 +237,7 @@ pub mod kernel {
         // 根据_n的值构造命令参数，-n表示启用特定模式
         let b = if _n { "-n" } else { "" };
         // 构造并执行magiskboot split命令
-        let a=exec(str_to_cstr(format!("magiskboot split {} {} ",b, cstring_to_string(file).expect("error"))));
+        let a=exec(str_to_cstr(format!("magiskboot split {} {} ",b, cstring_to_string(file))));
         // 根据命令执行结果返回相应的C字符串
         match a.success {
             true => {
@@ -263,7 +263,7 @@ pub mod kernel {
     #[no_mangle]
     pub extern "C" fn hsa1(file: *const c_char)->*const c_char{
         // 执行命令并获取结果
-        let a=exec(str_to_cstr(format!("magiskboot hsa1 {} ", cstring_to_string(file).expect("error"))));
+        let a=exec(str_to_cstr(format!("magiskboot hsa1 {} ", cstring_to_string(file))));
         // 根据命令执行结果返回相应的C字符串
         match a.success {
             true => {
@@ -301,7 +301,7 @@ pub mod kernel {
     #[no_mangle]
     pub extern "C" fn decompress(infile: *const c_char, outfile: *const c_char)->*const c_char{
         // 构造并执行解压缩命令
-        let a=exec(str_to_cstr(format!("magiskboot decompress {} {} ", cstring_to_string(infile).expect("error"), cstring_to_string(outfile).expect("error"))));
+        let a=exec(str_to_cstr(format!("magiskboot decompress {} {} ", cstring_to_string(infile), cstring_to_string(outfile))));
         // 根据命令执行结果返回相应的字符串
         match a.success {
             true => {
@@ -321,7 +321,7 @@ pub mod kernel {
     #[no_mangle]
     pub extern "C" fn compress(zip: *const c_char, infile: *const c_char, outfile: *const c_char) -> *const c_char {
         // 构造压缩命令并执行
-        let a = exec(str_to_cstr(format!("magiskboot compress={} {} {} ", cstring_to_string(zip).expect("error"), cstring_to_string(infile).expect("error"), cstring_to_string(outfile).expect("error"))));
+        let a = exec(str_to_cstr(format!("magiskboot compress={} {} {} ", cstring_to_string(zip), cstring_to_string(infile), cstring_to_string(outfile))));
 
         // 根据命令执行结果返回相应的字符串
         match a.success {

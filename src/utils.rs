@@ -52,13 +52,14 @@ pub mod utils {
     /// 该函数使用了 `unsafe` 块来进行裸指针操作。调用者必须确保传入的指针是有效的，并且指向一个以空字符结尾的 C 风格字符串。如果指针为空，函数将安全地返回一个空字符串。
 
 
-    pub fn cstring_to_string(s: *const c_char) -> Result<String, std::str::Utf8Error> {
+    pub fn cstring_to_string(s: *const c_char) -> String {
         unsafe {
             if s.is_null() {
-                return Ok(String::new());
+                return String::new();
             }
             let c_str = CStr::from_ptr(s);
-            c_str.to_str().map(|s| s.to_owned())
+            // 使用 to_string_lossy 确保总是返回一个有效的 String
+            c_str.to_string_lossy().into_owned()
         }
     }
 
@@ -79,10 +80,15 @@ pub mod utils {
     /// 返回一个 `CommandResult` 结构体，包含命令执行的结果。
     #[no_mangle]
     pub extern "C" fn exec(command: *const c_char) -> CommandResult {
+        // 将 C 风格字符串转换为 Rust 字符串
+        let command_str = cstring_to_string(command);
+
+        // 根据目标操作系统选择合适的命令前缀
         #[cfg(target_os = "windows")]
-        let com=format!("chcp 65001 >nul&& {}",cstring_to_string(command).expect("Failed to convert C string to Rust string"));
+        let com = format!("chcp 65001 >nul && {}", command_str);
         #[cfg(not(target_os = "windows"))]
-        let com=cstring_to_string(command).expect("Failed to convert C string to Rust string");
+        let com = command_str;
+
         // 根据目标操作系统选择合适的 shell 命令
         #[cfg(target_os = "windows")]
         let shell_command = "cmd";
@@ -95,12 +101,11 @@ pub mod utils {
         #[cfg(not(target_os = "windows"))]
         let arg_prefix = "-c";
 
-        // 构造完整的命令字符串，首先设置代码页为 65001 (UTF-8)，然后执行用户提供的命令
         // 执行命令并获取输出和错误信息
         let output = match Command::new(shell_command)
             .arg(arg_prefix) // 传递参数前缀
             .arg(&com) // 传递命令字符串
-            .creation_flags(0x08000000)
+            .creation_flags(0x08000000) // Windows only flag
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .output()
@@ -189,10 +194,11 @@ pub mod utils {
 
 
     pub fn str_to_cstr(s: String) -> *mut c_char {
-        // 使用 `CString::new` 创建一个新的 C 风格字符串，并自动处理转换过程中的错误。
-        let a = CString::new(s).unwrap();
-        // 通过 `into_raw` 方法获取原始指针，注意此时所有权转移给了调用者。
-        a.into_raw()
+        // 创建一个新的 C 风格字符串
+        match CString::new(s) {
+            Ok(c_string) => c_string.into_raw(),
+            Err(_) => ptr::null_mut(), // 或者选择其他方式处理错误
+        }
     }
 
     /// 返回当前时间自 UNIX_EPOCH（1970年1月1日00:00:00 UTC）以来的天数
@@ -239,7 +245,7 @@ pub mod utils {
     #[no_mangle]
     pub extern "C" fn check_file(file_path: *const c_char) -> i32 {
         // 将C字符串转换为Rust字符串
-        let file_path_str = cstring_to_string(file_path).unwrap();
+        let file_path_str = cstring_to_string(file_path);
         match fs::metadata(file_path_str) {
             Ok(_) => 1, // 文件存在，返回1
             Err(e) => {

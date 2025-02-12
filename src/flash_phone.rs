@@ -133,7 +133,7 @@ pub mod flash_phone {
     /// 以避免内存泄漏或未定义行为。
     #[no_mangle]
     pub extern "C" fn get_no_root_phone_data(id: *const c_char) -> *mut NoRootPhoneData {
-        let id_str = cstring_to_string(id).expect("error");
+        let id_str = cstring_to_string(id);
 
         let properties = vec![
             ("kernel_version", format!("adb -s {} shell uname -r", id_str)),
@@ -156,7 +156,7 @@ pub mod flash_phone {
         let mut no_root_phone_data = NoRootPhoneData::new();
 
         for (field, command) in properties {
-            let cstr = CString::new(cstring_to_string(exec(str_to_cstr(command)).stdout).expect("error").into_bytes()).expect("CString::new failed");
+            let cstr = CString::new(cstring_to_string(exec(str_to_cstr(command)).stdout).into_bytes()).expect("CString::new failed");
             match field {
                 "kernel_version" => no_root_phone_data.kernel_version = cstr.into_raw(),
                 "android_version" => no_root_phone_data.android_version = cstr.into_raw(),
@@ -196,7 +196,7 @@ pub mod flash_phone {
     /// 调用者需要在使用完返回的数据后适当释放内存
     #[no_mangle]
     pub extern "C" fn get_root_phone_data(id: *const c_char) -> *mut RootPhoneData {
-        let id_str = cstring_to_string(id).expect("error");
+        let id_str = cstring_to_string(id);
         let res = exec(str_to_cstr(format!("adb -s {} shell getprop", id_str))).stdout;
 
         let root_phone_data = RootPhoneData {
@@ -209,7 +209,7 @@ pub mod flash_phone {
     /// 执行Fastboot命令
 
       pub fn execute_fastboot_command(id: *const c_char, command:*const c_char,parameter:*const c_char) -> *const c_char {
-        let res = exec(str_to_cstr(format!("fastboot -s {} {} {}", cstring_to_string(id).expect("error"), cstring_to_string(command).expect("error"), cstring_to_string(parameter).expect("error"))));
+        let res = exec(str_to_cstr(format!("fastboot -s {} {} {}", cstring_to_string(id), cstring_to_string(command), cstring_to_string(parameter))));
         let result = if res.success {
             res.stdout
         } else {
@@ -248,17 +248,17 @@ pub mod flash_phone {
     pub extern "C" fn install_app(id: *const c_char, path: *const c_char, debug: bool, repeat: bool) -> *const c_char {
         let debug_new = if debug { "-t" } else { "" };
         let repeat_new = if repeat { "-r" } else { "" };
-        let id_str = cstring_to_string(id).expect("error");
-        let path_str = cstring_to_string(path).expect("error");
+        let id_str = cstring_to_string(id);
+        let path_str = cstring_to_string(path);
         let res = exec(str_to_cstr(format!("adb -s {} {} {} install {}", id_str, debug_new, repeat_new, path_str)));
         if res.success {
-            str_to_cstr(cstring_to_string(res.stdout).expect("REASON"))
+            str_to_cstr(cstring_to_string(res.stdout))
         } else {
-            str_to_cstr(cstring_to_string(res.stderr).expect("Failed to convert stdout"))
+            str_to_cstr(cstring_to_string(res.stderr))
         }
     }
      pub fn execute_adb_command(id: *const c_char, command: *const c_char,parameter:*const c_char) -> *const c_char {
-        let res = exec(str_to_cstr(format!("adb -s  {}  {}  {}", cstring_to_string(id).expect("error"), cstring_to_string(command).expect("error"), cstring_to_string(parameter).expect("error"))));
+        let res = exec(str_to_cstr(format!("adb -s  {}  {}  {}", cstring_to_string(id), cstring_to_string(command), cstring_to_string(parameter))));
         let result = if res.success {
             res.stdout
         } else {
@@ -299,16 +299,16 @@ pub mod flash_phone {
     #[no_mangle]
     pub extern "C" fn check_current_slot(id: *const c_char) -> *const c_char {
         // 将C风格字符串转换为Rust字符串
-        let id_str = cstring_to_string(id).expect("error");
+        let id_str = cstring_to_string(id);
 
         // 构造并执行命令，获取当前启动槽的信息
         let res = exec(str_to_cstr(format!("fastboot -s {} getvar current-slot", id_str)));
 
         // 根据执行结果返回相应的信息或错误信息
         if res.success {
-            str_to_cstr(cstring_to_string(res.stdout).expect("REASON"))
+            str_to_cstr(cstring_to_string(res.stdout))
         } else {
-            str_to_cstr(cstring_to_string(res.stderr).expect("REASON"))
+            str_to_cstr(cstring_to_string(res.stderr))
         }
     }
     /// 执行手机命令
@@ -328,17 +328,17 @@ pub mod flash_phone {
     #[no_mangle]
     pub extern "C" fn phone_exec(id: *const c_char, command: *const c_char) -> *const c_char {
         // 将C字符串转换为Rust字符串
-        let id_str = cstring_to_string(id).expect("error");
-        let command_str = cstring_to_string(command).expect("error");
+        let id_str = cstring_to_string(id);
+        let command_str = cstring_to_string(command);
 
         // 构造并执行ADB命令
         let res = exec(str_to_cstr(format!("adb -s {} shell {}", id_str, command_str)));
 
         // 根据命令执行结果返回相应的C字符串
         if res.success {
-            str_to_cstr(cstring_to_string(res.stdout).expect("REASON"))
+            str_to_cstr(cstring_to_string(res.stdout))
         } else {
-            str_to_cstr(cstring_to_string(res.stderr).expect("REASON"))
+            str_to_cstr(cstring_to_string(res.stderr))
         }
     }
     /// 启动手机的不同模式
@@ -355,7 +355,7 @@ pub mod flash_phone {
     #[no_mangle]
     pub extern "C" fn adb_phone_start(id: *const c_char, modle: i32) -> *const c_char {
         // 将C风格字符串转换为Rust字符串
-        let id_str = cstring_to_string(id).expect("error");
+        let id_str = cstring_to_string(id);
         let modles;
 
         // 根据modle参数选择不同的启动模式
@@ -385,15 +385,15 @@ pub mod flash_phone {
         let res = exec(str_to_cstr(format!("adb -s {} shell {}", id_str, modles)));
         // 根据命令执行结果返回相应的C风格字符串
         if res.success {
-            str_to_cstr(cstring_to_string(res.stdout).expect("REASON"))
+            str_to_cstr(cstring_to_string(res.stdout))
         } else {
-            str_to_cstr(cstring_to_string(res.stderr).expect("REASON"))
+            str_to_cstr(cstring_to_string(res.stderr))
         }
     }
     #[no_mangle]
     pub extern "C" fn fastboot_phone_start(id: *const c_char, modle: i32) -> *const c_char {
         // 将C风格字符串转换为Rust字符串
-        let id_str = cstring_to_string(id).expect("error");
+        let id_str = cstring_to_string(id);
         let  modles;
 
         // 根据modle参数选择不同的启动模式
@@ -423,9 +423,9 @@ pub mod flash_phone {
         let res = exec(str_to_cstr(format!("fastboot -s {} shell {}", id_str, modles)));
         // 根据命令执行结果返回相应的C风格字符串
         if res.success {
-            str_to_cstr(cstring_to_string(res.stdout).expect("REASON"))
+            str_to_cstr(cstring_to_string(res.stdout))
         } else {
-            str_to_cstr(cstring_to_string(res.stderr).expect("REASON"))
+            str_to_cstr(cstring_to_string(res.stderr))
         }
     }
    

@@ -17,8 +17,8 @@ mod tests {
     #[test]
     fn it_works() {
         set_console_output_cp_to_utf8();
-        let c=str_to_cstr("adb devices".parse().unwrap());
-        let result = exec(c).stderr;
-        println!("{}",cstring_to_string(result).expect("error"));
+        let c=str_to_cstr("echo 你好".parse().unwrap());
+        let result = exec(c).stdout;
+        println!("{}",cstring_to_string(result));
     }
 }

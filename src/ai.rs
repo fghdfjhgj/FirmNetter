@@ -189,12 +189,12 @@ pub mod ai {
         stop: *const c_char,
     ) -> *const c_char {
         // 将 C 字符串参数转换为 Rust 字符串
-        let url_str = cstring_to_string(url).expect("Failed to convert C string");
-        let api_key_str = cstring_to_string(api_key).expect("Failed to convert C string");
-        let model_str = cstring_to_string(model).expect("Failed to convert C string");
-        let role_str = cstring_to_string(role).expect("Failed to convert C string");
-        let content_str = cstring_to_string(content).expect("Failed to convert C string");
-        let stop_str = cstring_to_string(stop).expect("Failed to convert C string");
+        let url_str = cstring_to_string(url);
+        let api_key_str = cstring_to_string(api_key);
+        let model_str = cstring_to_string(model);
+        let role_str = cstring_to_string(role);
+        let content_str = cstring_to_string(content);
+        let stop_str = cstring_to_string(stop);
 
         // 创建并启动 Tokio 运行时以执行异步任务
         let rt = tokio::runtime::Runtime::new().expect("Failed to create Tokio runtime");
@@ -234,12 +234,12 @@ pub mod ai {
         stop: *const c_char,
     ) -> *const c_char {
         // 将 C 字符串参数转换为 Rust 字符串
-        let url_str = cstring_to_string(url).expect("Failed to convert C string");
-        let api_key_str = cstring_to_string(api_key).expect("Failed to convert C string");
-        let model_str = cstring_to_string(model).expect("Failed to convert C string");
-        let role_str = cstring_to_string(role).expect("Failed to convert C string");
-        let content_str = cstring_to_string(content).expect("Failed to convert C string");
-        let stop_str = cstring_to_string(stop).expect("Failed to convert C string");
+        let url_str = cstring_to_string(url);
+        let api_key_str = cstring_to_string(api_key);
+        let model_str = cstring_to_string(model);
+        let role_str = cstring_to_string(role);
+        let content_str = cstring_to_string(content);
+        let stop_str = cstring_to_string(stop);
 
         // 创建并启动 Tokio 运行时以执行异步任务
         let rt = tokio::runtime::Runtime::new().expect("Failed to create Tokio runtime");
