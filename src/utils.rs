@@ -5,6 +5,7 @@ pub mod utils {
     use std::time::{SystemTime, UNIX_EPOCH};
     use std::{fs, ptr, thread};
     use std::marker::PhantomData;
+    use std::os::windows::process::CommandExt;
     use std::sync::mpsc::{Receiver, Sender};
 
     /// 定义一个对外的 C 接口，执行外部命令
