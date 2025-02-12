@@ -80,7 +80,7 @@ pub mod utils {
     #[no_mangle]
     pub extern "C" fn exec(command: *const c_char) -> CommandResult {
         #[cfg(target_os = "windows")]
-        let com=format!("chcp 65001 && {}",cstring_to_string(command).expect("Failed to convert C string to Rust string"));
+        let com=format!("chcp 65001 >nul&& {}",cstring_to_string(command).expect("Failed to convert C string to Rust string"));
         #[cfg(not(target_os = "windows"))]
         let com=cstring_to_string(command).expect("Failed to convert C string to Rust string");
         // 根据目标操作系统选择合适的 shell 命令
