@@ -82,12 +82,11 @@ pub mod utils {
     pub extern "C" fn exec(command: *const c_char) -> CommandResult {
         // 将 C 风格字符串转换为 Rust 字符串
         let command_str = cstring_to_string(command);
-
-        // 根据目标操作系统选择合适的命令前缀
-        #[cfg(target_os = "windows")]
-        let com = format!("chcp 65001 >nul && {}", command_str);
-        #[cfg(not(target_os = "windows"))]
-        let com = command_str;
+        let com = if cfg!(target_os = "windows") {
+            format!("chcp 65001 >nul && set LANG=en_US.UTF-8 && {}", command_str)
+        } else {
+            format!("export LANG=en_US.UTF-8 && {}", command_str)
+        };
 
         // 根据目标操作系统选择合适的 shell 命令
         #[cfg(target_os = "windows")]
@@ -115,11 +114,13 @@ pub mod utils {
         };
 
         // 将标准输出转换为 C 兼容的字符串
-        let stdout_cstring = CString::new(String::from_utf8_lossy(&output.stdout).into_owned()).unwrap_or_else(|_| CString::new("").unwrap());
+        let stdout_str = String::from_utf8_lossy(&output.stdout).into_owned();
+        let stdout_cstring = CString::new(stdout_str).unwrap_or_else(|_| CString::new("").unwrap());
         let stdout_ptr = stdout_cstring.into_raw();
 
         // 将标准错误转换为 C 兼容的字符串
-        let stderr_cstring = CString::new(String::from_utf8_lossy(&output.stderr).into_owned()).unwrap_or_else(|_| CString::new("").unwrap());
+        let stderr_str = String::from_utf8_lossy(&output.stderr).into_owned();
+        let stderr_cstring = CString::new(stderr_str).unwrap_or_else(|_| CString::new("").unwrap());
         let stderr_ptr = stderr_cstring.into_raw();
 
         // 创建并返回命令执行结果
