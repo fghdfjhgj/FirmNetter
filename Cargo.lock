@@ -1295,7 +1295,7 @@ dependencies = [
 
 [[package]]
 name = "t3_lib_rust"
-version = "0.1.68"
+version = "0.1.69"
 dependencies = [
  "cbindgen",
  "diesel",
