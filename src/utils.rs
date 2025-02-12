@@ -259,7 +259,7 @@ pub mod utils {
         }
     }
 
-    struct SetConsoleOutputCP(i32);
+
 
     #[no_mangle]
 #[cfg(target_os = "windows")]
