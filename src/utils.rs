@@ -365,4 +365,62 @@ pub mod utils {
                 }
             }
         }
-    }}
+    }
+    #[no_mangle]
+    pub extern "C" fn utf_8_str_to_gbk_str(utf8_str: *const c_char) -> *mut c_char {
+        // 将 C 字符串转换为 Rust 字符串
+        let input_str = unsafe { CStr::from_ptr(utf8_str).to_string_lossy().into_owned() };
+
+        // 进行编码转换
+        let (encoded_bytes, _, had_errors) = GBK.encode(&input_str);
+
+        if had_errors {
+            println!("Warning: encountered errors during encoding.");
+        }
+
+        // 将 GBK 编码的字节数组转换为 C 字符串
+        match CString::new(encoded_bytes.into_owned()) {
+            Ok(c_string) => c_string.into_raw(), // 返回 C 字符串指针
+            Err(_) => ptr::null_mut(), // 如果转换失败，返回空指针
+        }
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+}
