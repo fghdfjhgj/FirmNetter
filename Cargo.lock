@@ -1300,6 +1300,7 @@ dependencies = [
  "cbindgen",
  "diesel",
  "dotenv",
+ "encoding_rs",
  "futures-util",
  "libc",
  "reqwest",

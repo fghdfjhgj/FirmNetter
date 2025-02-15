@@ -1,12 +1,12 @@
 pub mod utils {
     use std::ffi::{c_char, CStr, CString};
+    use std::marker::PhantomData;
     use std::process::{Command, Stdio};
+    use std::sync::mpsc::{Receiver, Sender};
     use std::sync::{mpsc, Arc, Mutex};
     use std::time::{SystemTime, UNIX_EPOCH};
     use std::{fs, ptr, thread};
-    use std::marker::PhantomData;
-    use std::os::windows::process::CommandExt;
-    use std::sync::mpsc::{Receiver, Sender};
+    use encoding_rs::GBK;
 
     /// 定义一个对外的 C 接口，执行外部命令
     /// 该接口使用原始指针和长度来传递命令字符串，以适应 C 语言的调用习惯
@@ -80,51 +80,49 @@ pub mod utils {
     /// 返回一个 `CommandResult` 结构体，包含命令执行的结果。
     #[no_mangle]
     pub extern "C" fn exec(command: *const c_char) -> CommandResult {
-        // 将 C 风格字符串转换为 Rust 字符串
-        let command_str = cstring_to_string(command);
-        let com = if cfg!(target_os = "windows") {
-            format!("chcp 65001 >nul && set LANG=en_US.UTF-8 && {}", command_str)
-        } else {
-            format!("export LANG=en_US.UTF-8 && {}", command_str)
-        };
+        let com_str = cstring_to_string(command);
 
-        // 根据目标操作系统选择合适的 shell 命令
         #[cfg(target_os = "windows")]
-        let shell_command = "cmd";
+        let shell = "cmd";
         #[cfg(not(target_os = "windows"))]
-        let shell_command = "sh"; // 注意这里改为 'sh' 而不是 'bin/bash'
+        let shell = "sh";
 
-        // 根据目标操作系统选择合适的命令参数前缀
         #[cfg(target_os = "windows")]
-        let arg_prefix = "/C";
+        let arg = "/C";
         #[cfg(not(target_os = "windows"))]
-        let arg_prefix = "-c";
+        let arg = "-c";
 
-        // 执行命令并获取输出和错误信息
-        let output = match Command::new(shell_command)
-            .arg(arg_prefix) // 传递参数前缀
-            .arg(&com) // 传递命令字符串
-            .creation_flags(0x08000000) // Windows only flag
+        #[cfg(target_os = "windows")]
+        let all_com = format!("chcp 65001 > nul && {}", com_str);
+        #[cfg(not(target_os = "windows"))]
+        let all_com = com_str;
+
+        let output = Command::new(shell)
+            .arg(arg)
+            .arg(&all_com)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .output()
-        {
-            Ok(output) => output,
-            Err(_) => return CommandResult::new(false, ptr::null_mut(), ptr::null_mut()),
+            .expect("Failed to execute command");
+
+        // 处理输出
+        let (decoded_stdout, _, had_errors) = GBK.decode(&output.stdout);
+        let stdout = if had_errors {
+            println!("Decoding issues encountered for stdout.");
+            String::from_utf8_lossy(&output.stdout).into_owned()
+        } else {
+            decoded_stdout.into_owned()
         };
 
-        // 将标准输出转换为 C 兼容的字符串
-        let stdout_str = String::from_utf8_lossy(&output.stdout).into_owned();
-        let stdout_cstring = CString::new(stdout_str).unwrap_or_else(|_| CString::new("").unwrap());
-        let stdout_ptr = stdout_cstring.into_raw();
+        let (decoded_stderr, _, had_errors) = GBK.decode(&output.stderr);
+        let stderr = if had_errors {
+            println!("Decoding issues encountered for stderr.");
+            String::from_utf8_lossy(&output.stderr).into_owned()
+        } else {
+            decoded_stderr.into_owned()
+        };
 
-        // 将标准错误转换为 C 兼容的字符串
-        let stderr_str = String::from_utf8_lossy(&output.stderr).into_owned();
-        let stderr_cstring = CString::new(stderr_str).unwrap_or_else(|_| CString::new("").unwrap());
-        let stderr_ptr = stderr_cstring.into_raw();
-
-        // 创建并返回命令执行结果
-        CommandResult::new(output.status.success(), stdout_ptr, stderr_ptr)
+        CommandResult::new(output.status.success(), str_to_cstr(stdout), str_to_cstr(stderr))
     }
 
     /// 释放 `CString` 内存的函数
@@ -261,31 +259,7 @@ pub mod utils {
 
 
 
-    #[no_mangle]
-#[cfg(target_os = "windows")]
-/// 设置控制台输出代码页为UTF-8 (代码页65001)。
-///
-/// 此函数用于确保控制台输出使用UTF-8编码，从而正确显示多语言字符。
-/// 仅在Windows操作系统上可用，并通过调用Windows API `SetConsoleOutputCP` 实现。
-///
-/// # 安全性
-/// 该函数使用了`unsafe`块来调用外部的Windows API。由于API调用本身是安全的，
-/// 并且没有涉及指针操作或其他不安全行为，因此这里的`unsafe`主要是为了遵循API调用的约定。
-///
-/// # 注意事项
-/// - 仅在目标操作系统为Windows时编译此函数。
-/// - 此函数被标记为`#[no_mangle]`以防止符号名在链接时被修改。
-pub extern "C" fn set_console_output_cp_to_utf8() {
-    unsafe {
-        // 声明外部Windows API函数
-        extern "system" {
-            fn SetConsoleOutputCP(codepage: u32) -> u32;
-        }
 
-        // 调用原始的SetConsoleOutputCP函数，设置为UTF-8 (代码页65001)
-        SetConsoleOutputCP(65001);
-    }
-}
     /// 将字符串按行分割成向量
     ///
     /// 该函数接受一个字符串切片作为输入，并将其按照行分隔符分割成一个字符串向量
