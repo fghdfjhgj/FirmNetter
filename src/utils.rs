@@ -367,7 +367,7 @@ pub mod utils {
         }
     }
     #[no_mangle]
-    pub extern "C" fn utf_8_str_to_gbk_str(utf8_str: *const c_char) -> *mut c_char {
+    pub extern "C" fn C_utf_8_str_to_gbk_str(utf8_str: *const c_char) -> *mut c_char {
         // 将 C 字符串转换为 Rust 字符串
         let input_str = unsafe { CStr::from_ptr(utf8_str).to_string_lossy().into_owned() };
 
@@ -383,6 +383,15 @@ pub mod utils {
             Ok(c_string) => c_string.into_raw(), // 返回 C 字符串指针
             Err(_) => ptr::null_mut(), // 如果转换失败，返回空指针
         }
+    }
+    pub fn utf_8_str_to_gbk_str(utf8_str: &str)-> String {
+        // 进行编码转换
+        let (encoded_bytes, _, had_errors) = GBK.encode(&utf8_str);
+
+        if had_errors {
+            println!("Warning: encountered errors during encoding.")
+        }
+        String::from_utf8_lossy(&encoded_bytes).into_owned()
     }
 
 
