@@ -216,7 +216,7 @@ pub mod ai {
         // 根据异步任务的结果返回相应的 C 字符串
         match result {
             Ok(result) => str_to_cstr(result),
-            Err(_) => str_to_cstr("Failed to send request".parse().unwrap()),
+            Err(_) => str_to_cstr("Failed to send request"),
         }
     }
 
@@ -261,7 +261,7 @@ pub mod ai {
         // 根据异步任务的结果返回相应的 C 字符串
         match result {
             Ok(result) => str_to_cstr(result),
-            Err(_) => str_to_cstr("Failed to send request".parse().unwrap()),
+            Err(_) => str_to_cstr("Failed to send request"),
         }
     }
 }

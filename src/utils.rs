@@ -78,7 +78,7 @@ pub mod utils {
     /// # 返回值
     ///
     /// 返回一个 `CommandResult` 结构体，包含命令执行的结果。
-    fn exec<T: AsRef<str>>(command: T) -> CommandResult {
+    pub fn exec<T: AsRef<str>>(command: T) -> CommandResult {
         let com_str = command.as_ref();
 
         #[cfg(target_os = "windows")]
@@ -92,7 +92,7 @@ pub mod utils {
         let arg = "-c";
 
         #[cfg(target_os = "windows")]
-        let all_com = format!("chcp 65001 > nul && {}", com_str);
+        let all_com =  com_str;
         #[cfg(not(target_os = "windows"))]
         let all_com = com_str.to_string();
 
@@ -226,7 +226,7 @@ pub mod utils {
     /// * `0` - 文件不存在
     /// * `-1` - 发生其他错误
     #[no_mangle]
-    pub extern "C" fn check_file(file_path: *const c_char) -> i32 {
+    pub extern "C" fn C_check_file(file_path: *const c_char) -> i32 {
         // 将 C 字符串转换为 Rust 字符串
         let file_path_str = unsafe {
             match CStr::from_ptr(file_path).to_str() {
@@ -235,22 +235,37 @@ pub mod utils {
             }
         };
 
-        check_file_generic(file_path_str)
+        check_file(file_path_str)
     }
 
-    // 泛型函数，支持多种字符串类型
-    fn check_file_generic<T: AsRef<Path>>(file_path: T) -> i32 {
-        match fs::metadata(file_path) {
-            Ok(_) => 1, // 文件存在，返回1
-            Err(e) => {
-                if e.kind() == std::io::ErrorKind::NotFound {
-                    0 // 文件不存在，返回0
-                } else {
-                    -1 // 其他错误发生，返回-1
-                }
+    /// 检查文件是否存在。
+///
+/// 该函数是一个泛型函数，支持多种字符串类型作为输入参数。它会尝试获取指定路径的文件元数据，
+/// 并根据结果返回相应的整数值。
+///
+/// # 参数
+///
+/// * `file_path` - 文件路径，可以是任何实现了 `AsRef<Path>` 特性的类型。
+///
+/// # 返回值
+///
+/// * `1` - 文件存在。
+/// * `0` - 文件不存在。
+/// * `-1` - 其他错误发生（例如权限问题等）。
+///
+pub fn check_file<T: AsRef<Path>>(file_path: T) -> i32 {
+    match fs::metadata(file_path) {
+        Ok(_) => 1,
+        Err(e) => {
+            if e.kind() == std::io::ErrorKind::NotFound {
+                0
+            } else {
+                -1
             }
         }
     }
+}
+
 
 
 
@@ -291,19 +306,41 @@ pub mod utils {
         T: Send + 'static,
         R: Send + 'static,
     {
+        /// 创建一个新的Worker实例。
+        ///
+        /// # 参数
+        ///
+        /// * `id` - Worker的唯一标识符。
+        /// * `receiver` - 一个包裹了Mutex和Arc的Receiver，用于在线程间安全地接收消息。
+        ///
+        /// # 返回值
+        ///
+        /// 返回一个Worker实例，它在线程中运行并等待处理任务。
+        ///
+        /// # 功能描述
+        ///
+        /// 本函数初始化一个新的Worker，它包含一个id和一个接收任务消息的接收器。
+        /// Worker在内部创建一个线程，该线程不断循环以接收并处理任务。
+        /// 当接收到终止信号时，线程退出循环并结束。
         fn new(id: usize, receiver: Arc<Mutex<Receiver<Message<R>>>>) -> Worker<T, R> {
+            // 创建一个线程，移动闭包捕获接收器以在新线程中使用。
             let thread = thread::spawn(move || loop {
-                let message = receiver.lock().unwrap().recv().unwrap();
-
+                // 从接收器中获取消息，这里使用了锁来确保线程安全。
+                let message = receiver.lock().expect("Failed to lock receiver").recv().expect("Failed to receive message");
+        
+                // 根据消息类型执行相应的操作。
                 match message {
+                    // 当接收到新任务时，执行任务并发送结果。
                     Message::NewJob(job, tx) => {
                         let result = job();
                         tx.send(result).expect("Failed to send result");
                     },
+                    // 当接收到终止信号时，退出循环。
                     Message::Terminate => break,
                 }
             });
-
+        
+            // 构建并返回Worker实例。
             Worker {
                 id,
                 thread: Some(thread),
@@ -322,6 +359,38 @@ pub mod utils {
         T: Send + 'static,
         R: Send + 'static,
     {
+        /// 创建一个新的ThreadPool实例。
+        ///
+        /// # 参数
+        ///
+        /// * `size` - 指定线程池中线程的数量。必须大于0。
+        ///
+        /// # 返回值
+        ///
+        /// 返回一个新的ThreadPool实例，该实例包含指定数量的线程。
+        ///
+        /// # 泛型参数
+        ///
+        /// * `T` - 任务的类型。
+        /// * `R` - 任务返回的结果类型。
+        ///
+        /// # 断言
+        ///
+        /// 函数开始时会断言`size`参数大于0，以确保线程池中至少有一个线程。
+        ///
+        /// # 通信机制
+        ///
+        /// 使用`mpsc::channel()`创建一个多生产者单消费者的消息通道，用于向线程池中的线程发送任务。
+        /// `Arc`和`Mutex`用于在多个线程之间安全地共享和访问消息接收器。
+        ///
+        /// # 线程池初始化
+        ///
+        /// 初始化一个具有指定容量的线程池，并为每个线程调用`Worker::new`函数来创建线程。
+        /// 使用`Arc::clone`来确保所有线程可以安全地访问消息接收器。
+        ///
+        /// # 结果
+        ///
+        /// 返回一个初始化完成的ThreadPool实例，包含配置的线程数量和一个用于发送任务到线程的消息发送器。
         pub fn new(size: usize) -> ThreadPool<T, R> {
             assert!(size > 0);
 
@@ -343,7 +412,7 @@ pub mod utils {
             let (tx, rx) = mpsc::channel();
             // 创建一个新的闭包，该闭包捕获了 `task` 和 `arg`
             let job = Box::new(move || task(arg));
-            self.sender.send(Message::NewJob(job, tx)).unwrap();
+            self.sender.send(Message::NewJob(job, tx)).expect("");
             rx
         }
     }
@@ -351,41 +420,81 @@ pub mod utils {
     impl<T, R> Drop for ThreadPool<T, R> {
         fn drop(&mut self) {
             for _ in &mut self.workers {
-                self.sender.send(Message::Terminate).unwrap();
+                self.sender.send(Message::Terminate).expect("");
             }
 
             for worker in &mut self.workers {
                 if let Some(thread) = worker.thread.take() {
-                    thread.join().unwrap();
+                    thread.join().expect("");
                 }
             }
         }
     }
-    #[no_mangle]
-    pub extern "C" fn C_utf_8_str_to_gbk_str(utf8_str: *const c_char) -> *mut c_char {
-        // 将 C 字符串转换为 Rust 字符串
-        let input_str = unsafe { CStr::from_ptr(utf8_str).to_string_lossy().into_owned() };
+    /// 将 UTF-8 编码的 C 字符串转换为 GBK 编码的 C 字符串。
+///
+/// # 参数
+///
+/// * `utf8_str` - 指向 UTF-8 编码的 C 字符串的指针 (`*const c_char`)。
+///
+/// # 返回值
+///
+/// * 成功时返回指向 GBK 编码的 C 字符串的指针 (`*mut c_char`)。
+/// * 如果编码转换过程中遇到错误或无法创建有效的 C 字符串，则返回空指针 (`ptr::null_mut()`)。
+///
+/// # 注意事项
+///
+/// * 该函数使用 `#[no_mangle]` 属性，确保其符号名称不会被 Rust 的名称修饰机制修改，以便与 C 语言代码互操作。
+/// * 在编码转换过程中，如果遇到无法转换的字符，会打印警告信息。
+#[no_mangle]
+pub extern "C" fn C_utf_8_str_to_gbk_str(utf8_str: *const c_char) -> *mut c_char {
+    // 将 C 字符串转换为 Rust 字符串
+    let input_str = unsafe { CStr::from_ptr(utf8_str).to_string_lossy().into_owned() };
+
+    // 进行编码转换
+    let (encoded_bytes, _, had_errors) = GBK.encode(&input_str);
+
+    if had_errors {
+        println!("Warning: encountered errors during encoding.");
+    }
+
+    // 将 GBK 编码的字节数组转换为 C 字符串
+    match CString::new(encoded_bytes.into_owned()) {
+        Ok(c_string) => c_string.into_raw(), // 返回 C 字符串指针
+        Err(_) => ptr::null_mut(), // 如果转换失败，返回空指针
+    }
+}
+/// 将 UTF-8 编码的字符串转换为 GBK 编码的字符串。
+///
+/// # 参数
+/// - `input`: 实现了 `AsRef<str>` trait 的类型，表示输入的 UTF-8 编码字符串。
+///
+/// # 返回值
+/// 返回一个 `String` 类型，表示转换后的 GBK 编码字符串。
+///
+/// # 注意事项
+/// - 如果输入字符串包含无法用 GBK 编码表示的字符，可能会出现乱码或错误。
+/// - 在编码过程中如果遇到错误，会输出警告信息。
+///
+/// # 示例
+///
+    pub fn utf_8_str_to_gbk_str<T: AsRef<str>>(input: T) -> String {
+        // 获取输入的引用字符串
+        let utf8_str = input.as_ref();
 
         // 进行编码转换
-        let (encoded_bytes, _, had_errors) = GBK.encode(&input_str);
+        let (encoded_bytes, _, had_errors) = GBK.encode(utf8_str);
 
         if had_errors {
             println!("Warning: encountered errors during encoding.");
         }
 
-        // 将 GBK 编码的字节数组转换为 C 字符串
-        match CString::new(encoded_bytes.into_owned()) {
-            Ok(c_string) => c_string.into_raw(), // 返回 C 字符串指针
-            Err(_) => ptr::null_mut(), // 如果转换失败，返回空指针
-        }
-    }
-    pub fn utf_8_str_to_gbk_str(utf8_str: &str)-> String {
-        // 进行编码转换
-        let (encoded_bytes, _, had_errors) = GBK.encode(&utf8_str);
+        // 将编码后的字节序列转换为 String
+        // 注意：这里直接将 GBK 编码的字节序列视为 UTF-8 可能会导致乱码或错误，
+        // 但在某些情况下（如仅用于显示或特定用途），可以这样做。
+        // 更好的做法是根据实际需求决定如何处理这些字节。
 
-        if had_errors {
-            println!("Warning: encountered errors during encoding.")
-        }
+        // 直接将 GBK 编码的字节序列转换为 String
+        // 这里我们使用 lossy 转换，以确保即使遇到无效的 UTF-8 字节也能生成一个 String
         String::from_utf8_lossy(&encoded_bytes).into_owned()
     }
 }
