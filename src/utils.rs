@@ -1,12 +1,12 @@
 pub mod utils {
+    use encoding_rs::GBK;
     use std::ffi::{c_char, CStr, CString};
     use std::marker::PhantomData;
+    use std::path::Path;
     use std::process::{Command, Stdio};
     use std::sync::mpsc::{Receiver, Sender};
     use std::sync::{mpsc, Arc, Mutex};
-    use std::time::{SystemTime, UNIX_EPOCH};
     use std::{fs, ptr, thread};
-    use encoding_rs::GBK;
 
     /// 定义一个对外的 C 接口，执行外部命令
     /// 该接口使用原始指针和长度来传递命令字符串，以适应 C 语言的调用习惯
@@ -78,9 +78,8 @@ pub mod utils {
     /// # 返回值
     ///
     /// 返回一个 `CommandResult` 结构体，包含命令执行的结果。
-    #[no_mangle]
-    pub extern "C" fn exec(command: *const c_char) -> CommandResult {
-        let com_str = cstring_to_string(command);
+    fn exec<T: AsRef<str>>(command: T) -> CommandResult {
+        let com_str = command.as_ref();
 
         #[cfg(target_os = "windows")]
         let shell = "cmd";
@@ -95,7 +94,7 @@ pub mod utils {
         #[cfg(target_os = "windows")]
         let all_com = format!("chcp 65001 > nul && {}", com_str);
         #[cfg(not(target_os = "windows"))]
-        let all_com = com_str;
+        let all_com = com_str.to_string();
 
         let output = Command::new(shell)
             .arg(arg)
@@ -122,7 +121,25 @@ pub mod utils {
             decoded_stderr.into_owned()
         };
 
-        CommandResult::new(output.status.success(), str_to_cstr(stdout), str_to_cstr(stderr))
+        CommandResult::new(
+            output.status.success(),
+            str_to_cstr(stdout),
+            str_to_cstr(stderr),
+        )
+    }
+
+    // 外部 C 接口
+    #[no_mangle]
+    pub extern "C" fn C_exec(command: *const c_char) -> CommandResult {
+        // 将 C 字符串转换为 Rust 字符串
+        let com_str = unsafe {
+            match CStr::from_ptr(command).to_str() {
+                Ok(s) => s,
+                Err(_) => return CommandResult::new(false, ptr::null_mut(), ptr::null_mut()),
+            }
+        };
+
+        exec(com_str)
     }
 
     /// 释放 `CString` 内存的函数
@@ -190,44 +207,11 @@ pub mod utils {
     /// 调用此函数的代码需要确保在使用完指针后正确地释放内存，以避免内存泄漏。
     /// 此外，由于返回的是一个原始指针，使用时需要确保不会造成未定义行为，例如
     /// 解引用悬挂指针等。
-
-
-    pub fn str_to_cstr(s: String) -> *mut c_char {
-        // 创建一个新的 C 风格字符串
-        match CString::new(s) {
-            Ok(c_string) => c_string.into_raw(),
-            Err(_) => ptr::null_mut(), // 或者选择其他方式处理错误
-        }
-    }
-
-    /// 返回当前时间自 UNIX_EPOCH（1970年1月1日00:00:00 UTC）以来的天数
-    ///
-    /// # 返回值
-    ///
-    /// 返回一个 `i32` 类型的值，表示当前时间自 UNIX_EPOCH 以来的天数。
-    /// 如果出现错误（例如，当前时间在 UNIX_EPOCH 之前），则返回 1 表示错误或无效的日期。
-    #[no_mangle]
-    pub extern "C" fn Get_time() -> i32 {
-        // 获取当前系统时间
-        let current_time = SystemTime::now();
-
-        // 尝试计算当前时间与 UNIX_EPOCH 的时间差
-        match current_time.duration_since(UNIX_EPOCH) {
-            // 如果时间差计算成功
-            Ok(duration) => {
-                // 将时间差转换为秒数
-                let seconds = duration.as_secs();
-
-                // 将秒数转换为天数
-                let days = seconds / 60 / 60 / 24;
-                // 将天数作为 `i32` 类型返回
-                days as i32
-            }
-            // 如果出现错误（例如，当前时间在 UNIX_EPOCH 之前）
-            Err(_e) => {
-                // 返回 1 表示错误或无效的日期
-                1
-            }
+    pub fn str_to_cstr<T: AsRef<str>>(s: T) -> *mut c_char {
+        // 尝试将输入转换为 CString
+        match CString::new(s.as_ref()) {
+            Ok(c_string) => c_string.into_raw(), // 转换成功，返回原始指针
+            Err(_) => ptr::null_mut(), // 如果包含 NUL 字符，返回空指针
         }
     }
     /// 检查指定路径的文件是否存在
@@ -243,9 +227,20 @@ pub mod utils {
     /// * `-1` - 发生其他错误
     #[no_mangle]
     pub extern "C" fn check_file(file_path: *const c_char) -> i32 {
-        // 将C字符串转换为Rust字符串
-        let file_path_str = cstring_to_string(file_path);
-        match fs::metadata(file_path_str) {
+        // 将 C 字符串转换为 Rust 字符串
+        let file_path_str = unsafe {
+            match CStr::from_ptr(file_path).to_str() {
+                Ok(s) => s,
+                Err(_) => return -1, // 如果转换失败，返回-1
+            }
+        };
+
+        check_file_generic(file_path_str)
+    }
+
+    // 泛型函数，支持多种字符串类型
+    fn check_file_generic<T: AsRef<Path>>(file_path: T) -> i32 {
+        match fs::metadata(file_path) {
             Ok(_) => 1, // 文件存在，返回1
             Err(e) => {
                 if e.kind() == std::io::ErrorKind::NotFound {
@@ -393,43 +388,4 @@ pub mod utils {
         }
         String::from_utf8_lossy(&encoded_bytes).into_owned()
     }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 }
