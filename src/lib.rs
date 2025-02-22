@@ -12,9 +12,23 @@ pub use sql::sql as other_sql;
 pub use web::web as other_web;
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+    use crate::other_web::{web_post, ResponseBody};
+
     #[test]
     fn it_works() {
+        let mut form_data = HashMap::new();
+        form_data.insert("Softid","0H9G1H8Q5O9G0H2Z");
+        let a=web_post("http://api.1wxyun.com/?type=1",form_data,false);
 
+        let response_string = match a.unwrap().body {
+            ResponseBody::Text(text) => text,
+            ResponseBody::Bytes(bytes) => match std::str::from_utf8(&bytes) {
+                Ok(v) => v.to_string(),
+                Err(_) => String::from("Received binary data that is not valid UTF-8"),
+            },
+        };
+        println!("{}",response_string);
 
     }
 }
