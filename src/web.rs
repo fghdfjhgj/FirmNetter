@@ -25,7 +25,7 @@ impl ResPost {
     }
 }
 
-pub fn web_post(url: &str, form_data: &HashMap<&str, &str>) -> Result<ResPost, Box<dyn Error>> {
+pub fn web_post<T: AsRef<str> + reqwest::IntoUrl>(url: T, form_data: &HashMap<&str, &str>) -> Result<ResPost, Box<dyn Error>> {
     let client = Client::new();
 
     // 发送 POST 请求，并处理可能的错误

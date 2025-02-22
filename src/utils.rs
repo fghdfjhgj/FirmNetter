@@ -475,7 +475,6 @@ pub extern "C" fn C_utf_8_str_to_gbk_str(utf8_str: *const c_char) -> *mut c_char
 /// - 如果输入字符串包含无法用 GBK 编码表示的字符，可能会出现乱码或错误。
 /// - 在编码过程中如果遇到错误，会输出警告信息。
 ///
-/// # 示例
 ///
     pub fn utf_8_str_to_gbk_str<T: AsRef<str>>(input: T) -> String {
         // 获取输入的引用字符串
