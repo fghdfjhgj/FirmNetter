@@ -3,6 +3,22 @@
 version = 4
 
 [[package]]
+name = "FirmNetter"
+version = "0.1.7"
+dependencies = [
+ "cbindgen",
+ "diesel",
+ "dotenv",
+ "encoding_rs",
+ "futures-util",
+ "libc",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
 name = "addr2line"
 version = "0.24.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1291,22 +1307,6 @@ checksum = "8e1d1b10ced5ca923a1fcb8d03e96b8d3268065d724548c0211415ff6ac6bac4"
 dependencies = [
  "core-foundation-sys",
  "libc",
-]
-
-[[package]]
-name = "t3_lib_rust"
-version = "0.1.7"
-dependencies = [
- "cbindgen",
- "diesel",
- "dotenv",
- "encoding_rs",
- "futures-util",
- "libc",
- "reqwest",
- "serde",
- "serde_json",
- "tokio",
 ]
 
 [[package]]

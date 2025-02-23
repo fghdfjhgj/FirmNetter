@@ -1,5 +1,5 @@
 [package]
-name = "t3_lib_rust"
+name = "FirmNetter"
 version = "0.1.7"
 edition = "2021"
 description = "测试，请勿使用！"
