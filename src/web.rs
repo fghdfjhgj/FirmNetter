@@ -41,7 +41,7 @@ pub mod web {
 pub fn convert_res_post_body_to_string(res_post: ResPost) -> String {
     match res_post.body {
         ResponseBody::Text(text) => text,
-        ResponseBody::Bytes(bytes) => match str::from_utf8(&bytes) {
+        ResponseBody::Bytes(bytes) => match std::str::from_utf8(&bytes) {
             Ok(v) => v.to_string(),
             Err(_) => "Received binary data that is not valid UTF-8".to_string(),
         },
