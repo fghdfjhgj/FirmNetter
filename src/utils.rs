@@ -7,6 +7,7 @@ pub mod utils {
     use std::sync::mpsc::{Receiver, Sender};
     use std::sync::{mpsc, Arc, Mutex};
     use std::{fs, ptr, thread};
+    use std::io::BufRead;
 
     /// 定义一个对外的 C 接口，执行外部命令
     /// 该接口使用原始指针和长度来传递命令字符串，以适应 C 语言的调用习惯
@@ -284,7 +285,7 @@ pub fn check_file<T: AsRef<Path>>(file_path: T) -> i32 {
     /// 返回一个`Vec<String>`，其中每个元素都是原字符串中的一行
     ///
 
-    pub fn split_by_newline(text: &str) -> Vec<String> {
+    pub fn split_by_newline<T: AsRef<str>>(text: T) -> Vec<String> {
         // 使用lines方法按行分隔字符串，然后使用map方法将每一行转换为String类型，最后收集到一个Vec中
         text.lines().map(String::from).collect()
     }

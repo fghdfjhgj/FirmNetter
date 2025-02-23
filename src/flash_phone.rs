@@ -241,7 +241,7 @@ pub mod flash_phone {
 
     #[no_mangle]
     pub extern "C" fn flash_init_boot(id: *const c_char, path: *const c_char) -> *const c_char {
-        execute_fastboot_command(id, str_to_cstr("init_boot"), path)
+        execute_fastboot_command(id, str_to_cstr("flash init_boot"), path)
     }
 
     #[no_mangle]
