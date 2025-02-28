@@ -66,11 +66,11 @@ pub mod utils {
 
     /// 释放 `CommandResult` 结构体中包含的 C 字符串内存
     #[no_mangle]
-    pub extern "C" fn free_command_result(result: CommandResult) {
-        result.free();
-    }
+    unsafe  extern "C" pub fn free_command_result(result: CommandResult) {
+    result.free();
+}
 
-    /// 执行外部命令并返回结果
+/// 执行外部命令并返回结果
     ///
     /// # 参数
     ///
