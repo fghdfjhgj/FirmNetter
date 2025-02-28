@@ -286,8 +286,8 @@ pub fn check_file<T: AsRef<Path>>(file_path: T) -> i32 {
     ///
 
     pub fn split_by_newline<T: AsRef<str>>(text: T) -> Vec<String> {
-        // 使用lines方法按行分隔字符串，然后使用map方法将每一行转换为String类型，最后收集到一个Vec中
-        text.lines().map(String::from).collect()
+        // 使用as_ref()将T转换为&str，然后调用lines方法
+        text.as_ref().lines().map(String::from).collect()
     }
     type Job<R> = Box<dyn FnOnce() -> R + Send>;
 

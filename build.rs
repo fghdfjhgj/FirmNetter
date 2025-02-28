@@ -35,7 +35,7 @@ fn main() {
                 fs::create_dir_all(parent).expect("Unable to create parent directories for output file");
             }
 
-            bindings.write_to_file(out_dir.join("lib_tool.h"));
+            bindings.write_to_file(out_dir.join("FirmNetter.h"));
             println!("Successfully generated lib_tool.h in {}", out_dir.display());
         }
         Err(e) => {
