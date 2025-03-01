@@ -51,16 +51,18 @@ pub mod ai {
     ///
     /// # 返回值
     /// - 返回指向C字符串的指针，表示API的响应结果或错误信息。
-    pub async fn get_ai_no_stream(url: &str,
-                                 api_key: &str,
-                                 model: &str,
-                                 role: &str,
-                                 content: &str,
-                                 temperature: f32,
-                                 max_tokens: i32,
-                                 top_p: f32,
-                                 n: i32,
-                                 stop: &str) -> Result<String, Box<dyn std::error::Error>> {
+    pub async fn get_ai_no_stream(
+        url: &str,
+        api_key: &str,
+        model: &str,
+        role: &str,
+        content: &str,
+        temperature: f32,
+        max_tokens: i32,
+        top_p: f32,
+        n: i32,
+        stop: &str,
+    ) -> Result<String, Box<dyn std::error::Error>> {
         // 构建JSON请求体
         let json_data = ChatRequest {
             model: model.to_string(),
@@ -175,7 +177,7 @@ pub mod ai {
     ///
     /// # 备注
     /// 该函数使用了 Tokio 运行时来处理异步任务，并确保与 C 语言的互操作性。
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn C_get_ai_stream(
         url: *const c_char,
         api_key: *const c_char,
@@ -210,7 +212,8 @@ pub mod ai {
                 top_p,
                 n,
                 &stop_str,
-            ).await
+            )
+            .await
         });
 
         // 根据异步任务的结果返回相应的 C 字符串
@@ -220,7 +223,7 @@ pub mod ai {
         }
     }
 
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn C_get_ai_no_stream(
         url: *const c_char,
         api_key: *const c_char,
@@ -255,7 +258,8 @@ pub mod ai {
                 top_p,
                 n,
                 &stop_str,
-            ).await
+            )
+            .await
         });
 
         // 根据异步任务的结果返回相应的 C 字符串

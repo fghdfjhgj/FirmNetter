@@ -1,4 +1,3 @@
-
 pub mod sql {
     use crate::other_utils::free_and_reset_c_string;
     use diesel::pg::PgConnection;
@@ -12,19 +11,19 @@ pub mod sql {
     #[repr(C)]
     pub struct UserData {
         pub user_id: i32,
-        pub user_name: *const c_char,      // 使用 C 字符串指针
-        pub user_email: *const c_char,     // 使用 C 字符串指针
-        pub user_password: *const c_char,  // 使用 C 字符串指针
-        pub user_ip: *const c_char,        // 使用 C 字符串指针
-        pub user_imei: *const c_char,      // 使用 C 字符串指针
+        pub user_name: *const c_char,     // 使用 C 字符串指针
+        pub user_email: *const c_char,    // 使用 C 字符串指针
+        pub user_password: *const c_char, // 使用 C 字符串指针
+        pub user_ip: *const c_char,       // 使用 C 字符串指针
+        pub user_imei: *const c_char,     // 使用 C 字符串指针
         pub user_kami: *const c_char,
     }
 
     #[repr(C)]
     pub struct KamiData {
         pub kami_id: i32,
-        pub kami_name: *const c_char,      // 使用 C 字符串指针
-        pub kami_time: *const c_char,                // 使用时间戳 (秒)
+        pub kami_name: *const c_char, // 使用 C 字符串指针
+        pub kami_time: *const c_char, // 使用时间戳 (秒)
         pub kami_if_kami: *const c_char,
     }
     // Diesel 表定义
@@ -78,12 +77,11 @@ pub mod sql {
     }
 
     /// 建立到 PostgresSQL 数据库的连接。
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn establish_connection() -> *mut Database {
         dotenv().ok();
 
-        let database_url = env::var("DATABASE_URL")
-            .expect("DATABASE_URL must be set");
+        let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
 
         let conn = PgConnection::establish(&database_url)
             .expect(&format!("Error connecting to {}", database_url));
@@ -93,7 +91,7 @@ pub mod sql {
         }))
     }
     /// 释放数据库连接。
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn drop_db(db: *mut Database) {
         if !db.is_null() {
             unsafe { drop(Box::from_raw(db)) };
@@ -113,18 +111,23 @@ pub mod sql {
     /// # 返回
     ///
     /// 返回一个 C 风格字符串指针，表示操作的结果信息。
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn create_user(
         db: *mut Database,
         user_name: *const c_char,
         user_email: *const c_char,
         user_password: *const c_char,
         user_ip: *const c_char,
-        user_imei:*const c_char,
+        user_imei: *const c_char,
         user_kami: *const c_char,
     ) -> *const c_char {
         // 检查传入的指针是否为空
-        if db.is_null() || user_name.is_null() || user_email.is_null() || user_password.is_null() || user_ip.is_null() {
+        if db.is_null()
+            || user_name.is_null()
+            || user_email.is_null()
+            || user_password.is_null()
+            || user_ip.is_null()
+        {
             return CString::new("Invalid parameters").unwrap().into_raw();
         }
 
@@ -147,7 +150,11 @@ pub mod sql {
         };
         let password_str = match c_password.to_str() {
             Ok(s) => s,
-            Err(_) => return CString::new("Failed to convert password").unwrap().into_raw(),
+            Err(_) => {
+                return CString::new("Failed to convert password")
+                    .unwrap()
+                    .into_raw();
+            }
         };
         let ip_str = match c_ip.to_str() {
             Ok(s) => s,
@@ -182,11 +189,14 @@ pub mod sql {
 
         // 根据操作结果返回相应的 C 风格字符串指针
         match result {
-            Ok(_) => CString::new("User created successfully").unwrap().into_raw(),
-            Err(e) => CString::new(format!("Failed to create user: {}", e)).unwrap().into_raw(),
+            Ok(_) => CString::new("User created successfully")
+                .unwrap()
+                .into_raw(),
+            Err(e) => CString::new(format!("Failed to create user: {}", e))
+                .unwrap()
+                .into_raw(),
         }
     }
-
 
     /// 插入新地记录到 kami 表。
     ///
@@ -201,7 +211,7 @@ pub mod sql {
     ///
     /// - 成功时返回成功消息的 C 风格字符串指针。
     /// - 失败时返回错误消息的 C 风格字符串指针。
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn create_kami(
         db: *mut Database,
         kami_name: *const c_char,
@@ -227,7 +237,7 @@ pub mod sql {
             Ok(s) => s,
             Err(_) => return CString::new("Failed to convert kami").unwrap().into_raw(),
         };
-        let time_str=match c_time.to_str() {
+        let time_str = match c_time.to_str() {
             Ok(s) => s,
             Err(_) => return CString::new("Failed to convert time").unwrap().into_raw(),
         };
@@ -253,8 +263,12 @@ pub mod sql {
 
         // 根据插入结果返回相应的消息
         match result {
-            Ok(_) => CString::new("Kami record created successfully").unwrap().into_raw(),
-            Err(e) => CString::new(format!("Failed to create kami record: {}", e)).unwrap().into_raw(),
+            Ok(_) => CString::new("Kami record created successfully")
+                .unwrap()
+                .into_raw(),
+            Err(e) => CString::new(format!("Failed to create kami record: {}", e))
+                .unwrap()
+                .into_raw(),
         }
     }
 
@@ -268,7 +282,7 @@ pub mod sql {
     /// # 返回
     ///
     /// 返回一个 C 风格字符串指针，表示操作的结果信息。
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn check_kami_exists(
         db: *mut Database,
         kami_name: *const c_char,
@@ -293,9 +307,10 @@ pub mod sql {
             let mut conn = db_ref.conn.lock().unwrap(); // 获取 MutexGuard 的可变引用
             // 使用 Diesel 查询构建器检查卡密是否存在
             diesel::select(diesel::dsl::exists(
-                kami::table.filter(kami::name.eq(name_str))
+                kami::table.filter(kami::name.eq(name_str)),
             ))
-                .get_result::<bool>(&mut *conn).unwrap_or(false)
+            .get_result::<bool>(&mut *conn)
+            .unwrap_or(false)
         };
 
         // 根据查询结果返回相应的 C 风格字符串指针
@@ -307,18 +322,15 @@ pub mod sql {
     }
     /// 定义一个 C 风格的函数，用于检查用户是否存在
     /// 该函数通过原始指针接收数据库连接和用户名，并返回一个表示用户是否存在的 C 风格字符串指针
-    #[no_mangle]
-    pub extern "C" fn check_user_exists(
-        db: *mut Database,
-        user: *const c_char,
-    ) -> *const c_char {
+    #[unsafe(no_mangle)]
+    pub extern "C" fn check_user_exists(db: *mut Database, user: *const c_char) -> *const c_char {
         // 检查传入的指针是否为空
         if db.is_null() || user.is_null() {
             return CString::new("Invalid parameters").unwrap().into_raw();
         }
 
         // 将 C 风格字符串指针转换为 Rust 的 CStr 类型
-        let c_name = unsafe { CStr::from_ptr(user)};
+        let c_name = unsafe { CStr::from_ptr(user) };
 
         // 将 CStr 类型转换为 Rust 的字符串切片
         let name_str = match c_name.to_str() {
@@ -331,9 +343,10 @@ pub mod sql {
             let db_ref = unsafe { &mut *db }; // 解引用原始指针为可变引用
             let mut conn = db_ref.conn.lock().unwrap(); // 获取 MutexGuard 的可变引用
             diesel::select(diesel::dsl::exists(
-                kami::table.filter(kami::name.eq(name_str))
+                kami::table.filter(kami::name.eq(name_str)),
             ))
-                .get_result::<bool>(&mut *conn).unwrap_or(false) // 使用可变引用
+            .get_result::<bool>(&mut *conn)
+            .unwrap_or(false) // 使用可变引用
         };
 
         // 根据查询结果返回相应的 C 风格字符串指针
@@ -354,7 +367,7 @@ pub mod sql {
     /// # 安全性
     /// 该函数涉及裸指针的使用和释放，因此需要谨慎处理以避免内存泄漏或未定义行为。
     /// 确保传递给此函数的指针是有效的，且未被其他地方使用。
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn free_user_data(data: *mut UserData) {
         if data.is_null() {
             return;
@@ -364,14 +377,13 @@ pub mod sql {
 
         // 安全地释放并重置 C 字符串
 
-            free_and_reset_c_string(&mut data.user_name);
-            free_and_reset_c_string(&mut data.user_email);
-            free_and_reset_c_string(&mut data.user_password);
-            free_and_reset_c_string(&mut data.user_ip);
-            free_and_reset_c_string(&mut data.user_imei);
-            free_and_reset_c_string(&mut data.user_kami);
-            data.user_id = 0;
-
+        free_and_reset_c_string(&mut data.user_name);
+        free_and_reset_c_string(&mut data.user_email);
+        free_and_reset_c_string(&mut data.user_password);
+        free_and_reset_c_string(&mut data.user_ip);
+        free_and_reset_c_string(&mut data.user_imei);
+        free_and_reset_c_string(&mut data.user_kami);
+        data.user_id = 0;
 
         // `data` 在这里被丢弃，释放 Box 分配的内存
     }
@@ -384,7 +396,7 @@ pub mod sql {
     /// # 参数
     ///
     /// * `data` - 指向 KamiData 结构体的指针。如果指针为 NULL，则函数直接返回。
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn free_kami_data(data: *mut KamiData) {
         // 检查指针是否为 NULL，如果为 NULL，则直接返回
         if data.is_null() {
@@ -396,12 +408,10 @@ pub mod sql {
 
         // 安全地释放并重置 C 字符串
 
-            free_and_reset_c_string(&mut data.kami_name);
-            free_and_reset_c_string(&mut data.kami_if_kami);
-            free_and_reset_c_string(&mut data.kami_time);
-            data.kami_id = 0;
-
-
+        free_and_reset_c_string(&mut data.kami_name);
+        free_and_reset_c_string(&mut data.kami_if_kami);
+        free_and_reset_c_string(&mut data.kami_time);
+        data.kami_id = 0;
 
         // `data` 在这里被丢弃，释放 Box 分配的内存
     }
@@ -415,7 +425,7 @@ pub mod sql {
     /// # 返回
     ///
     /// 返回用户的唯一主键值，如果用户不存在则返回 -1。
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn get_user_id_by_imei(db: *mut Database, imei: *const c_char) -> i32 {
         // 检查传入的指针是否为空
         if db.is_null() || imei.is_null() {
@@ -457,7 +467,7 @@ pub mod sql {
     /// # 返回
     ///
     /// 返回一个指向 `UserData` 结构体的指针，如果用户不存在则返回 NULL。
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn get_user_by_id(db: *mut Database, user_id: i32) -> *mut UserData {
         if db.is_null() {
             return ptr::null_mut();
@@ -499,7 +509,7 @@ pub mod sql {
             ptr::null_mut()
         }
     }
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     /// 根据名称获取Kami数据
     ///
     /// 此函数被设计为C语言接口，用于从数据库中根据名称查询Kami信息，并返回一个KamiData结构体。
@@ -512,7 +522,10 @@ pub mod sql {
     /// # 返回
     /// - 成功时返回一个指向KamiData结构体的指针
     /// - 失败时返回空指针
-    pub extern "C" fn get_kami_by_name(db: *mut Database, kami_name: *const c_char) -> *mut KamiData {
+    pub extern "C" fn get_kami_by_name(
+        db: *mut Database,
+        kami_name: *const c_char,
+    ) -> *mut KamiData {
         // 检查传入的指针是否为空
         if db.is_null() || kami_name.is_null() {
             return ptr::null_mut();
@@ -530,7 +543,7 @@ pub mod sql {
             // 执行数据库查询并获取结果
             kami::table
                 .filter(kami::name.eq(kami_name_str))
-                .first::<(i32, String,String, String)>(&mut *conn)
+                .first::<(i32, String, String, String)>(&mut *conn)
                 .optional()
                 .unwrap_or(None)
         };
@@ -557,7 +570,4 @@ pub mod sql {
             ptr::null_mut()
         }
     }
-
-
 }
-

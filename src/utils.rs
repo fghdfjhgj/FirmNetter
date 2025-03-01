@@ -1,13 +1,12 @@
 pub mod utils {
     use encoding_rs::GBK;
-    use std::ffi::{c_char, CStr, CString};
+    use std::ffi::{CStr, CString, c_char};
     use std::marker::PhantomData;
     use std::path::Path;
     use std::process::{Command, Stdio};
     use std::sync::mpsc::{Receiver, Sender};
-    use std::sync::{mpsc, Arc, Mutex};
+    use std::sync::{Arc, Mutex, mpsc};
     use std::{fs, ptr, thread};
-    use std::io::BufRead;
 
     /// 定义一个对外的 C 接口，执行外部命令
     /// 该接口使用原始指针和长度来传递命令字符串，以适应 C 语言的调用习惯
@@ -18,9 +17,12 @@ pub mod utils {
         pub stderr: *mut c_char,
     }
     impl CommandResult {
-
         fn new(success: bool, stdout: *mut c_char, stderr: *mut c_char) -> Self {
-            CommandResult { success, stdout, stderr }
+            CommandResult {
+                success,
+                stdout,
+                stderr,
+            }
         }
 
         // 提供一个方法来安全地释放由 CommandResult 包含的 C 字符串
@@ -52,7 +54,6 @@ pub mod utils {
     ///
     /// 该函数使用了 `unsafe` 块来进行裸指针操作。调用者必须确保传入的指针是有效的，并且指向一个以空字符结尾的 C 风格字符串。如果指针为空，函数将安全地返回一个空字符串。
 
-
     pub fn cstring_to_string(s: *const c_char) -> String {
         unsafe {
             if s.is_null() {
@@ -65,12 +66,12 @@ pub mod utils {
     }
 
     /// 释放 `CommandResult` 结构体中包含的 C 字符串内存
-    #[no_mangle]
-    unsafe  extern "C" pub fn free_command_result(result: CommandResult) {
-    result.free();
-}
+    #[unsafe(no_mangle)]
+     pub extern "C" fn free_command_result(result: CommandResult) {
+        result.free();
+    }
 
-/// 执行外部命令并返回结果
+    /// 执行外部命令并返回结果
     ///
     /// # 参数
     ///
@@ -93,7 +94,7 @@ pub mod utils {
         let arg = "-c";
 
         #[cfg(target_os = "windows")]
-        let all_com =  com_str;
+        let all_com = com_str;
         #[cfg(not(target_os = "windows"))]
         let all_com = com_str.to_string();
 
@@ -130,8 +131,8 @@ pub mod utils {
     }
 
     // 外部 C 接口
-    #[no_mangle]
-    pub extern "C" fn C_exec(command: *const c_char) -> CommandResult {
+    #[unsafe(no_mangle)]
+    pub extern "C" fn c_exec(command: *const c_char) -> CommandResult {
         // 将 C 字符串转换为 Rust 字符串
         let com_str = unsafe {
             match CStr::from_ptr(command).to_str() {
@@ -150,7 +151,7 @@ pub mod utils {
     /// # 参数
     ///
     /// * `ptr` - 一个指向 C 字符串的指针。
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn free_cstring(ptr: *mut c_char) {
         // 使用 `unsafe` 块，因为涉及到直接操作原始指针
         unsafe {
@@ -177,7 +178,7 @@ pub mod utils {
     ///
     /// 此函数涉及不安全代码块，因为它处理原始指针。必须确保在释放内存后指针不会再次被使用，以避免悬挂指针。
     /// 通过将指针设置为 `NULL`，我们确保了这一点。
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn free_and_reset_c_string(ptr: &mut *const c_char) {
         unsafe {
             if !ptr.is_null() {
@@ -212,7 +213,7 @@ pub mod utils {
         // 尝试将输入转换为 CString
         match CString::new(s.as_ref()) {
             Ok(c_string) => c_string.into_raw(), // 转换成功，返回原始指针
-            Err(_) => ptr::null_mut(), // 如果包含 NUL 字符，返回空指针
+            Err(_) => ptr::null_mut(),           // 如果包含 NUL 字符，返回空指针
         }
     }
     /// 检查指定路径的文件是否存在
@@ -226,8 +227,8 @@ pub mod utils {
     /// * `1` - 文件存在
     /// * `0` - 文件不存在
     /// * `-1` - 发生其他错误
-    #[no_mangle]
-    pub extern "C" fn C_check_file(file_path: *const c_char) -> i32 {
+    #[unsafe(no_mangle)]
+    pub extern "C" fn c_check_file(file_path: *const c_char) -> i32 {
         // 将 C 字符串转换为 Rust 字符串
         let file_path_str = unsafe {
             match CStr::from_ptr(file_path).to_str() {
@@ -240,36 +241,32 @@ pub mod utils {
     }
 
     /// 检查文件是否存在。
-///
-/// 该函数是一个泛型函数，支持多种字符串类型作为输入参数。它会尝试获取指定路径的文件元数据，
-/// 并根据结果返回相应的整数值。
-///
-/// # 参数
-///
-/// * `file_path` - 文件路径，可以是任何实现了 `AsRef<Path>` 特性的类型。
-///
-/// # 返回值
-///
-/// * `1` - 文件存在。
-/// * `0` - 文件不存在。
-/// * `-1` - 其他错误发生（例如权限问题等）。
-///
-pub fn check_file<T: AsRef<Path>>(file_path: T) -> i32 {
-    match fs::metadata(file_path) {
-        Ok(_) => 1,
-        Err(e) => {
-            if e.kind() == std::io::ErrorKind::NotFound {
-                0
-            } else {
-                -1
+    ///
+    /// 该函数是一个泛型函数，支持多种字符串类型作为输入参数。它会尝试获取指定路径的文件元数据，
+    /// 并根据结果返回相应的整数值。
+    ///
+    /// # 参数
+    ///
+    /// * `file_path` - 文件路径，可以是任何实现了 `AsRef<Path>` 特性的类型。
+    ///
+    /// # 返回值
+    ///
+    /// * `1` - 文件存在。
+    /// * `0` - 文件不存在。
+    /// * `-1` - 其他错误发生（例如权限问题等）。
+    ///
+    pub fn check_file<T: AsRef<Path>>(file_path: T) -> i32 {
+        match fs::metadata(file_path) {
+            Ok(_) => 1,
+            Err(e) => {
+                if e.kind() == std::io::ErrorKind::NotFound {
+                    0
+                } else {
+                    -1
+                }
             }
         }
     }
-}
-
-
-
-
 
     /// 将字符串按行分割成向量
     ///
@@ -325,22 +322,28 @@ pub fn check_file<T: AsRef<Path>>(file_path: T) -> i32 {
         /// 当接收到终止信号时，线程退出循环并结束。
         fn new(id: usize, receiver: Arc<Mutex<Receiver<Message<R>>>>) -> Worker<T, R> {
             // 创建一个线程，移动闭包捕获接收器以在新线程中使用。
-            let thread = thread::spawn(move || loop {
-                // 从接收器中获取消息，这里使用了锁来确保线程安全。
-                let message = receiver.lock().expect("Failed to lock receiver").recv().expect("Failed to receive message");
-        
-                // 根据消息类型执行相应的操作。
-                match message {
-                    // 当接收到新任务时，执行任务并发送结果。
-                    Message::NewJob(job, tx) => {
-                        let result = job();
-                        tx.send(result).expect("Failed to send result");
-                    },
-                    // 当接收到终止信号时，退出循环。
-                    Message::Terminate => break,
+            let thread = thread::spawn(move || {
+                loop {
+                    // 从接收器中获取消息，这里使用了锁来确保线程安全。
+                    let message = receiver
+                        .lock()
+                        .expect("Failed to lock receiver")
+                        .recv()
+                        .expect("Failed to receive message");
+
+                    // 根据消息类型执行相应的操作。
+                    match message {
+                        // 当接收到新任务时，执行任务并发送结果。
+                        Message::NewJob(job, tx) => {
+                            let result = job();
+                            tx.send(result).expect("Failed to send result");
+                        }
+                        // 当接收到终止信号时，退出循环。
+                        Message::Terminate => break,
+                    }
                 }
             });
-        
+
             // 构建并返回Worker实例。
             Worker {
                 id,
@@ -432,51 +435,51 @@ pub fn check_file<T: AsRef<Path>>(file_path: T) -> i32 {
         }
     }
     /// 将 UTF-8 编码的 C 字符串转换为 GBK 编码的 C 字符串。
-///
-/// # 参数
-///
-/// * `utf8_str` - 指向 UTF-8 编码的 C 字符串的指针 (`*const c_char`)。
-///
-/// # 返回值
-///
-/// * 成功时返回指向 GBK 编码的 C 字符串的指针 (`*mut c_char`)。
-/// * 如果编码转换过程中遇到错误或无法创建有效的 C 字符串，则返回空指针 (`ptr::null_mut()`)。
-///
-/// # 注意事项
-///
-/// * 该函数使用 `#[no_mangle]` 属性，确保其符号名称不会被 Rust 的名称修饰机制修改，以便与 C 语言代码互操作。
-/// * 在编码转换过程中，如果遇到无法转换的字符，会打印警告信息。
-#[no_mangle]
-pub extern "C" fn C_utf_8_str_to_gbk_str(utf8_str: *const c_char) -> *mut c_char {
-    // 将 C 字符串转换为 Rust 字符串
-    let input_str = unsafe { CStr::from_ptr(utf8_str).to_string_lossy().into_owned() };
+    ///
+    /// # 参数
+    ///
+    /// * `utf8_str` - 指向 UTF-8 编码的 C 字符串的指针 (`*const c_char`)。
+    ///
+    /// # 返回值
+    ///
+    /// * 成功时返回指向 GBK 编码的 C 字符串的指针 (`*mut c_char`)。
+    /// * 如果编码转换过程中遇到错误或无法创建有效的 C 字符串，则返回空指针 (`ptr::null_mut()`)。
+    ///
+    /// # 注意事项
+    ///
+    /// * 该函数使用 `#[unsafe(no_mangle)]` 属性，确保其符号名称不会被 Rust 的名称修饰机制修改，以便与 C 语言代码互操作。
+    /// * 在编码转换过程中，如果遇到无法转换的字符，会打印警告信息。
+    #[unsafe(no_mangle)]
+    pub extern "C" fn c_utf_8_str_to_gbk_str(utf8_str: *const c_char) -> *mut c_char {
+        // 将 C 字符串转换为 Rust 字符串
+        let input_str = unsafe { CStr::from_ptr(utf8_str).to_string_lossy().into_owned() };
 
-    // 进行编码转换
-    let (encoded_bytes, _, had_errors) = GBK.encode(&input_str);
+        // 进行编码转换
+        let (encoded_bytes, _, had_errors) = GBK.encode(&input_str);
 
-    if had_errors {
-        println!("Warning: encountered errors during encoding.");
+        if had_errors {
+            println!("Warning: encountered errors during encoding.");
+        }
+
+        // 将 GBK 编码的字节数组转换为 C 字符串
+        match CString::new(encoded_bytes.into_owned()) {
+            Ok(c_string) => c_string.into_raw(), // 返回 C 字符串指针
+            Err(_) => ptr::null_mut(),           // 如果转换失败，返回空指针
+        }
     }
-
-    // 将 GBK 编码的字节数组转换为 C 字符串
-    match CString::new(encoded_bytes.into_owned()) {
-        Ok(c_string) => c_string.into_raw(), // 返回 C 字符串指针
-        Err(_) => ptr::null_mut(), // 如果转换失败，返回空指针
-    }
-}
-/// 将 UTF-8 编码的字符串转换为 GBK 编码的字符串。
-///
-/// # 参数
-/// - `input`: 实现了 `AsRef<str>` trait 的类型，表示输入的 UTF-8 编码字符串。
-///
-/// # 返回值
-/// 返回一个 `String` 类型，表示转换后的 GBK 编码字符串。
-///
-/// # 注意事项
-/// - 如果输入字符串包含无法用 GBK 编码表示的字符，可能会出现乱码或错误。
-/// - 在编码过程中如果遇到错误，会输出警告信息。
-///
-///
+    /// 将 UTF-8 编码的字符串转换为 GBK 编码的字符串。
+    ///
+    /// # 参数
+    /// - `input`: 实现了 `AsRef<str>` trait 的类型，表示输入的 UTF-8 编码字符串。
+    ///
+    /// # 返回值
+    /// 返回一个 `String` 类型，表示转换后的 GBK 编码字符串。
+    ///
+    /// # 注意事项
+    /// - 如果输入字符串包含无法用 GBK 编码表示的字符，可能会出现乱码或错误。
+    /// - 在编码过程中如果遇到错误，会输出警告信息。
+    ///
+    ///
     pub fn utf_8_str_to_gbk_str<T: AsRef<str>>(input: T) -> String {
         // 获取输入的引用字符串
         let utf8_str = input.as_ref();

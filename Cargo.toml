@@ -14,14 +14,14 @@ crate-type = ["cdylib","rlib","staticlib"]
 [dependencies]
 
 reqwest = { version = "0.12.12" , features = ["blocking", "json","stream"] }
-diesel = { version = "2.0.0", features = ["postgres"] }
+diesel = { version = "2.2.7", features = ["postgres"] }
 dotenv = "0.15.0"
-libc = "0.2.169"
+libc = "0.2.170"
 serde = { version = "1.0.217", features = ["derive"] }
-serde_json= "1.0.79"
+serde_json= "1.0.139"
 futures-util = "0.3.31"
 tokio = { version = "1.43.0", features = ["rt-multi-thread"] }
-encoding_rs = "0.8"
+encoding_rs = "0.8.35"
 
 [build-dependencies]
 cbindgen = "0.28.0"
