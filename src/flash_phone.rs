@@ -234,7 +234,7 @@ pub mod flash_phone {
         let mut no_root_phone_data = NoRootPhoneData::new();
 
         for (field, command) in properties {
-            let cstr = CString::new(cstring_to_string(exec(command).stdout).into_bytes())
+            let cstr =CString::new(c_exec(str_to_cstr(&command)).c_stderr.as_bytes())
                 .expect("CString::new failed");
             match field {
                 "kernel_version" => no_root_phone_data.kernel_version = cstr.into_raw(),
@@ -281,8 +281,9 @@ pub mod flash_phone {
     /// 调用者需要在使用完返回的数据后适当释放内存
     #[unsafe(no_mangle)]
     pub extern "C" fn get_root_phone_data(id: *const c_char) -> *mut RootPhoneData {
+        
         let id_str = cstring_to_string(id);
-        let res = exec(format!("adb -s {} shell getprop", id_str)).stdout;
+        let res = c_exec(str_to_cstr(format!("adb -s {} shell getprop", id_str))).c_stderr;
 
         let root_phone_data = RootPhoneData {
             root_ro_serialno: res,
@@ -298,13 +299,13 @@ pub mod flash_phone {
         command: *const c_char,
         parameter: *const c_char,
     ) -> *const c_char {
-        let res = exec(format!(
+        let res = c_exec(str_to_cstr(format!(
             "fastboot -s {} {} {}",
             cstring_to_string(id),
             cstring_to_string(command),
             cstring_to_string(parameter)
-        ));
-        let result = if res.success { res.stdout } else { res.stderr };
+        )));
+        let result = if res.success { res.c_stderr } else { res.c_stderr };
         free_command_result(res);
         result
     }
@@ -345,14 +346,14 @@ pub mod flash_phone {
         let repeat_new = if repeat { "-r" } else { "" };
         let id_str = cstring_to_string(id);
         let path_str = cstring_to_string(path);
-        let res = exec(format!(
+        let res = c_exec(str_to_cstr(format!(
             "adb -s {} {} {} install {}",
             id_str, debug_new, repeat_new, path_str
-        ));
+        )));
         if res.success {
-            str_to_cstr(cstring_to_string(res.stdout))
+            str_to_cstr(cstring_to_string(res.c_stdout))
         } else {
-            str_to_cstr(cstring_to_string(res.stderr))
+            str_to_cstr(cstring_to_string(res.c_stderr))
         }
     }
     pub fn execute_adb_command(
@@ -360,25 +361,25 @@ pub mod flash_phone {
         command: *const c_char,
         parameter: *const c_char,
     ) -> *const c_char {
-        let res = exec(format!(
+        let res = c_exec(str_to_cstr(format!(
             "adb -s  {}  {}  {}",
             cstring_to_string(id),
             cstring_to_string(command),
             cstring_to_string(parameter)
-        ));
-        let result = if res.success { res.stdout } else { res.stderr };
+        )));
+        let result = if res.success { res.c_stdout } else { res.c_stderr };
         free_command_result(res);
         result
     }
 
     #[unsafe(no_mangle)]
     pub extern "C" fn adb_devices_phone() -> *const c_char {
-        exec("adb devices").stdout
+        c_exec(str_to_cstr("adb devices")).c_stdout
     }
 
     #[unsafe(no_mangle)]
     pub extern "C" fn fastboot_devices_phone() -> *const c_char {
-        exec("fastboot devices").stdout
+        c_exec(str_to_cstr("fastboot devices")).c_stdout
     }
 
     #[unsafe(no_mangle)]
@@ -404,13 +405,13 @@ pub mod flash_phone {
         let id_str = cstring_to_string(id);
 
         // 构造并执行命令，获取当前启动槽的信息
-        let res = exec(format!("fastboot -s {} getvar current-slot", id_str));
+        let res = c_exec(str_to_cstr(format!("fastboot -s {} getvar current-slot", id_str)));
 
         // 根据执行结果返回相应的信息或错误信息
         if res.success {
-            str_to_cstr(cstring_to_string(res.stdout))
+            str_to_cstr(cstring_to_string(res.c_stdout))
         } else {
-            str_to_cstr(cstring_to_string(res.stderr))
+            str_to_cstr(cstring_to_string(res.c_stderr))
         }
     }
     /// 执行手机命令
@@ -434,13 +435,13 @@ pub mod flash_phone {
         let command_str = cstring_to_string(command);
 
         // 构造并执行ADB命令
-        let res = exec(format!("adb -s {} shell {}", id_str, command_str));
+        let res = c_exec(str_to_cstr(format!("adb -s {} shell {}", id_str, command_str)));
 
         // 根据命令执行结果返回相应的C字符串
         if res.success {
-            str_to_cstr(cstring_to_string(res.stdout))
+            str_to_cstr(cstring_to_string(res.c_stdout))
         } else {
-            str_to_cstr(cstring_to_string(res.stderr))
+            str_to_cstr(cstring_to_string(res.c_stderr))
         }
     }
     /// 启动手机的不同模式
@@ -484,12 +485,12 @@ pub mod flash_phone {
         }
 
         // 执行ADB命令
-        let res = exec(format!("adb -s {} shell {}", id_str, modles));
+        let res = c_exec(str_to_cstr(format!("adb -s {} shell {}", id_str, modles)));
         // 根据命令执行结果返回相应的C风格字符串
         if res.success {
-            str_to_cstr(cstring_to_string(res.stdout))
+            str_to_cstr(cstring_to_string(res.c_stdout))
         } else {
-            str_to_cstr(cstring_to_string(res.stderr))
+            str_to_cstr(cstring_to_string(res.c_stderr))
         }
     }
     #[unsafe(no_mangle)]
@@ -522,12 +523,12 @@ pub mod flash_phone {
         }
 
         // 执行fastboot命令
-        let res = exec(format!("fastboot -s {} shell {}", id_str, modles));
+        let res = c_exec(str_to_cstr(format!("fastboot -s {} shell {}", id_str, modles)));
         // 根据命令执行结果返回相应的C风格字符串
         if res.success {
-            str_to_cstr(cstring_to_string(res.stdout))
+            str_to_cstr(cstring_to_string(res.c_stdout))
         } else {
-            str_to_cstr(cstring_to_string(res.stderr))
+            str_to_cstr(cstring_to_string(res.c_stderr))
         }
     }
 }

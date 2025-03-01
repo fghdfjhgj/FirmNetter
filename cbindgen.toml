@@ -2,7 +2,7 @@
 language = "C"
 
 # 控制哪些模块会被包含
-parse = { include = ["t3_lib_rust"] }
+parse = { include = ["FirmNetter"] }
 
 # 设置只包括公共文档（即不包括被标记为 #[doc(hidden)] 的项）
 documentation=true
@@ -11,7 +11,7 @@ documentation=true
 
 
 # 包含头文件保护
-include_guard = "HEADER_GUARD"
+include_guard = "FirmNetter"
 
 # 自动生成警告信息
 autogen_warning = "/* Warning: This file is auto-generated. Do not edit manually! */"

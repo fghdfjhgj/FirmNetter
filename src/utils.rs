@@ -7,21 +7,18 @@ pub mod utils {
     use std::sync::mpsc::{Receiver, Sender};
     use std::sync::{Arc, Mutex, mpsc};
     use std::{fs, ptr, thread};
-
-    /// 定义一个对外的 C 接口，执行外部命令
-    /// 该接口使用原始指针和长度来传递命令字符串，以适应 C 语言的调用习惯
     #[repr(C)]
-    pub struct CommandResult {
+    pub struct CCommandResult {
         pub success: bool,
-        pub stdout: *mut c_char,
-        pub stderr: *mut c_char,
+        pub c_stdout: *mut c_char,
+        pub c_stderr: *mut c_char,
     }
-    impl CommandResult {
-        fn new(success: bool, stdout: *mut c_char, stderr: *mut c_char) -> Self {
-            CommandResult {
+    impl CCommandResult {
+        fn new(success: bool, c_stdout: *mut c_char, c_stderr: *mut c_char) -> Self {
+            CCommandResult {
                 success,
-                stdout,
-                stderr,
+                c_stdout,
+                c_stderr,
             }
         }
 
@@ -29,13 +26,36 @@ pub mod utils {
 
         pub fn free(&self) {
             unsafe {
-                if !self.stdout.is_null() {
-                    let _ = CString::from_raw(self.stdout);
+                if !self.c_stdout.is_null() {
+                    let _ = CString::from_raw(self.c_stdout);
                 }
-                if !self.stderr.is_null() {
-                    let _ = CString::from_raw(self.stderr);
+                if !self.c_stderr.is_null() {
+                    let _ = CString::from_raw(self.c_stderr);
                 }
             }
+        }
+    }
+
+    /// 定义一个对外的 C 接口，执行外部命令
+    /// 该接口使用原始指针和长度来传递命令字符串，以适应 C 语言的调用习惯
+
+    pub struct CommandResult {
+        pub success: bool,
+        pub stdout: String,
+        pub stderr: String,
+    }
+    impl CommandResult {
+        fn new(success: bool, stdout:String, stderr:String) -> Self {
+            CommandResult {
+                success,
+                stdout,
+                stderr,
+            }
+        }
+        pub fn clear(&mut self) {
+            self.success = false;
+            self.stdout.clear(); // 使用 String 的 clear 方法来清空字符串
+            self.stderr.clear(); // 使用 String 的 clear 方法来清空字符串
         }
     }
 
@@ -65,9 +85,9 @@ pub mod utils {
         }
     }
 
-    /// 释放 `CommandResult` 结构体中包含的 C 字符串内存
+    /// 释放 `CCommandResult` 结构体中包含的 C 字符串内存
     #[unsafe(no_mangle)]
-     pub extern "C" fn free_command_result(result: CommandResult) {
+     pub extern "C" fn free_command_result(result: CCommandResult) {
         result.free();
     }
 
@@ -125,23 +145,21 @@ pub mod utils {
 
         CommandResult::new(
             output.status.success(),
-            str_to_cstr(stdout),
-            str_to_cstr(stderr),
+            stdout,
+            stderr,
         )
     }
 
     // 外部 C 接口
     #[unsafe(no_mangle)]
-    pub extern "C" fn c_exec(command: *const c_char) -> CommandResult {
-        // 将 C 字符串转换为 Rust 字符串
-        let com_str = unsafe {
-            match CStr::from_ptr(command).to_str() {
-                Ok(s) => s,
-                Err(_) => return CommandResult::new(false, ptr::null_mut(), ptr::null_mut()),
-            }
-        };
-
-        exec(com_str)
+    pub extern "C" fn c_exec(command: *const c_char) -> CCommandResult {
+        let command_str = cstring_to_string(command);
+        let result = exec(command_str);
+        CCommandResult::new(
+            result.success,
+            CString::new(result.stdout).unwrap().into_raw(),
+            CString::new(result.stderr).unwrap().into_raw(),
+        )
     }
 
     /// 释放 `CString` 内存的函数
