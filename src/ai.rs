@@ -178,7 +178,7 @@ pub mod ai {
     /// # 备注
     /// 该函数使用了 Tokio 运行时来处理异步任务，并确保与 C 语言的互操作性。
     #[unsafe(no_mangle)]
-    pub extern "C" fn C_get_ai_stream(
+    pub extern "C" fn c_get_ai_stream(
         url: *const c_char,
         api_key: *const c_char,
         model: *const c_char,
@@ -224,7 +224,7 @@ pub mod ai {
     }
 
     #[unsafe(no_mangle)]
-    pub extern "C" fn C_get_ai_no_stream(
+    pub extern "C" fn c_get_ai_no_stream(
         url: *const c_char,
         api_key: *const c_char,
         model: *const c_char,
