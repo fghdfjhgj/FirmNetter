@@ -3,6 +3,7 @@ pub mod sql {
     use diesel::pg::PgConnection;
     use diesel::prelude::*;
     use dotenv::dotenv;
+
     use libc::c_char;
     use std::ffi::{CStr, CString};
     use std::sync::{Arc, Mutex};
@@ -75,6 +76,7 @@ pub mod sql {
     pub struct Database {
         pub conn: Arc<Mutex<PgConnection>>,
     }
+
 
     /// 建立到 PostgresSQL 数据库的连接。
     #[unsafe(no_mangle)]

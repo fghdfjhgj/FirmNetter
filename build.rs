@@ -76,7 +76,7 @@ fn main() {
                 eprintln!("Failed to generate bindings: {:?}", e);
                 std::process::exit(1);
             }
-    }
+        }
     }
     // 告诉 Cargo 在哪里可以找到静态库
 

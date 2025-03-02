@@ -234,7 +234,7 @@ pub mod flash_phone {
         let mut no_root_phone_data = NoRootPhoneData::new();
 
         for (field, command) in properties {
-            let cstr =CString::new(c_exec(str_to_cstr(&command)).c_stderr.as_bytes())
+            let cstr =CString::new(cstring_to_string(c_exec(str_to_cstr(&command)).c_stderr).as_bytes())
                 .expect("CString::new failed");
             match field {
                 "kernel_version" => no_root_phone_data.kernel_version = cstr.into_raw(),

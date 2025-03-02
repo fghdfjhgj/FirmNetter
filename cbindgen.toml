@@ -1,25 +1,17 @@
-# cbindgen.toml
+# 设置生成的语言为 C
 language = "C"
 
 # 控制哪些模块会被包含
 parse = { include = ["FirmNetter"] }
 
 # 设置只包括公共文档（即不包括被标记为 #[doc(hidden)] 的项）
-documentation=true
-  # 或者 true，取决于你的需求
-# 设置语言为C或C++
-
+documentation = true
 
 # 包含头文件保护
-include_guard = "FirmNetter"
+include_guard = "FIRMNETTER_H"
 
 # 自动生成警告信息
 autogen_warning = "/* Warning: This file is auto-generated. Do not edit manually! */"
 
 # 如果需要将所有导出项放在同一个 extern "C" 块中
-#[cpp]
-# 开启 extern "C" 包装
-#enable_extern_c = true
-
-# 如果你希望将所有导出项放在同一个 extern "C" 块中
-#single_extern_c_block = true
+cpp_compat = true

@@ -5,9 +5,9 @@ pub mod flash_phone;
 pub mod web;
 pub use ai::ai as other_ai;
 mod kernel;
-#[cfg(target_os = "windows")]
+
 pub mod sql;
-#[cfg(target_os = "windows")]
+
 pub use sql::sql as other_sql;
 
 
