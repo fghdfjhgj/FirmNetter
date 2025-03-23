@@ -5,12 +5,6 @@ pub mod flash_phone;
 pub mod web;
 pub use ai::ai as other_ai;
 mod kernel;
-
-pub mod sql;
-
-pub use sql::sql as other_sql;
-
-
 pub use flash_phone::flash_phone as other_flash_phone;
 pub use kernel::kernel as other_kernel;
 
