@@ -1,9 +1,9 @@
 pub mod utils;
 pub use utils::utils as other_utils;
-pub mod ai;
+
 pub mod flash_phone;
 pub mod web;
-pub use ai::ai as other_ai;
+
 mod kernel;
 pub use flash_phone::flash_phone as other_flash_phone;
 pub use kernel::kernel as other_kernel;
