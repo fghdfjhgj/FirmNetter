@@ -1,12 +1,9 @@
 pub mod utils {
     use encoding_rs::GBK;
-    use std::ffi::{CStr, CString, c_char};
-    use std::marker::PhantomData;
+    use std::ffi::{c_char, CStr, CString};
     use std::path::Path;
     use std::process::{Command, Stdio};
-    use std::sync::mpsc::{Receiver, Sender};
-    use std::sync::{Arc, Mutex, mpsc};
-    use std::{fs, ptr, thread};
+    use std::{fs, ptr};
     #[repr(C)]
     pub struct CCommandResult {
         pub success: bool,
@@ -304,154 +301,7 @@ pub mod utils {
         // 使用as_ref()将T转换为&str，然后调用lines方法
         text.as_ref().lines().map(String::from).collect()
     }
-    type Job<R> = Box<dyn FnOnce() -> R + Send>;
 
-    enum Message<R> {
-        NewJob(Job<R>, Sender<R>),
-        Terminate,
-    }
-
-    struct Worker<T, R> {
-        id: usize,
-        thread: Option<thread::JoinHandle<()>>,
-        _phantom: PhantomData<(T, R)>,
-    }
-
-    impl<T, R> Worker<T, R>
-    where
-        T: Send + 'static,
-        R: Send + 'static,
-    {
-        /// 创建一个新的Worker实例。
-        ///
-        /// # 参数
-        ///
-        /// * `id` - Worker的唯一标识符。
-        /// * `receiver` - 一个包裹了Mutex和Arc的Receiver，用于在线程间安全地接收消息。
-        ///
-        /// # 返回值
-        ///
-        /// 返回一个Worker实例，它在线程中运行并等待处理任务。
-        ///
-        /// # 功能描述
-        ///
-        /// 本函数初始化一个新的Worker，它包含一个id和一个接收任务消息的接收器。
-        /// Worker在内部创建一个线程，该线程不断循环以接收并处理任务。
-        /// 当接收到终止信号时，线程退出循环并结束。
-        fn new(id: usize, receiver: Arc<Mutex<Receiver<Message<R>>>>) -> Worker<T, R> {
-            // 创建一个线程，移动闭包捕获接收器以在新线程中使用。
-            let thread = thread::spawn(move || {
-                loop {
-                    // 从接收器中获取消息，这里使用了锁来确保线程安全。
-                    let message = receiver
-                        .lock()
-                        .expect("Failed to lock receiver")
-                        .recv()
-                        .expect("Failed to receive message");
-
-                    // 根据消息类型执行相应的操作。
-                    match message {
-                        // 当接收到新任务时，执行任务并发送结果。
-                        Message::NewJob(job, tx) => {
-                            let result = job();
-                            tx.send(result).expect("Failed to send result");
-                        }
-                        // 当接收到终止信号时，退出循环。
-                        Message::Terminate => break,
-                    }
-                }
-            });
-
-            // 构建并返回Worker实例。
-            Worker {
-                id,
-                thread: Some(thread),
-                _phantom: PhantomData,
-            }
-        }
-    }
-
-    pub struct ThreadPool<T, R> {
-        workers: Vec<Worker<T, R>>,
-        sender: Sender<Message<R>>,
-    }
-
-    impl<T, R> ThreadPool<T, R>
-    where
-        T: Send + 'static,
-        R: Send + 'static,
-    {
-        /// 创建一个新的ThreadPool实例。
-        ///
-        /// # 参数
-        ///
-        /// * `size` - 指定线程池中线程的数量。必须大于0。
-        ///
-        /// # 返回值
-        ///
-        /// 返回一个新的ThreadPool实例，该实例包含指定数量的线程。
-        ///
-        /// # 泛型参数
-        ///
-        /// * `T` - 任务的类型。
-        /// * `R` - 任务返回的结果类型。
-        ///
-        /// # 断言
-        ///
-        /// 函数开始时会断言`size`参数大于0，以确保线程池中至少有一个线程。
-        ///
-        /// # 通信机制
-        ///
-        /// 使用`mpsc::channel()`创建一个多生产者单消费者的消息通道，用于向线程池中的线程发送任务。
-        /// `Arc`和`Mutex`用于在多个线程之间安全地共享和访问消息接收器。
-        ///
-        /// # 线程池初始化
-        ///
-        /// 初始化一个具有指定容量的线程池，并为每个线程调用`Worker::new`函数来创建线程。
-        /// 使用`Arc::clone`来确保所有线程可以安全地访问消息接收器。
-        ///
-        /// # 结果
-        ///
-        /// 返回一个初始化完成的ThreadPool实例，包含配置的线程数量和一个用于发送任务到线程的消息发送器。
-        pub fn new(size: usize) -> ThreadPool<T, R> {
-            assert!(size > 0);
-
-            let (sender, receiver) = mpsc::channel();
-            let receiver = Arc::new(Mutex::new(receiver));
-            let mut workers = Vec::with_capacity(size);
-
-            for id in 0..size {
-                workers.push(Worker::new(id, Arc::clone(&receiver)));
-            }
-
-            ThreadPool { workers, sender }
-        }
-
-        pub fn submit<F>(&self, task: F, arg: T) -> Receiver<R>
-        where
-            F: FnOnce(T) -> R + Send + 'static,
-        {
-            let (tx, rx) = mpsc::channel();
-            // 创建一个新的闭包，该闭包捕获了 `task` 和 `arg`
-            let job = Box::new(move || task(arg));
-            self.sender.send(Message::NewJob(job, tx)).expect("");
-            rx
-        }
-    }
-
-    impl<T, R> Drop for ThreadPool<T, R> {
-        fn drop(&mut self) {
-            for _ in &mut self.workers {
-                self.sender.send(Message::Terminate).expect("");
-            }
-
-            for worker in &mut self.workers {
-                if let Some(thread) = worker.thread.take() {
-                    thread.join().expect("");
-                }
-            }
-        }
-    }
     /// 将 UTF-8 编码的 C 字符串转换为 GBK 编码的 C 字符串。
     ///
     /// # 参数
