@@ -1,4 +1,4 @@
-#[cfg(feature = "utils")]
+
 pub mod utils {
     use encoding_rs::GBK;
     use std::ffi::{c_char, CStr, CString};

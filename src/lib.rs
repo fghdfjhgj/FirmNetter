@@ -1,32 +1,17 @@
+#[cfg(feature = "utils")]
 pub mod utils;
+#[cfg(feature = "utils")]
 pub use utils::utils as other_utils;
-
+#[cfg(feature = "flash_phone")]
 pub mod flash_phone;
-pub mod web;
-
-mod kernel;
+#[cfg(feature = "flash_phone")]
 pub use flash_phone::flash_phone as other_flash_phone;
+#[cfg(feature = "web")]
+pub mod web;
+#[cfg(feature = "web")]
+pub use web::web as other_web;
+#[cfg(feature = "kernel")]
+mod kernel;
+#[cfg(feature = "kernel")]
 pub use kernel::kernel as other_kernel;
 
-pub use web::web as other_web;
-#[cfg(test)]
-mod tests {
-    use crate::other_web::{ResponseBody, web_post};
-    use std::collections::HashMap;
-
-    #[test]
-    fn it_works() {
-        let mut form_data = HashMap::new();
-        form_data.insert("Softid", "0H9G1H8Q5O9G0H2Z");
-        let a = web_post("http://api.1wxyun.com/?type=1", form_data, false);
-
-        let response_string = match a.unwrap().body {
-            ResponseBody::Text(text) => text,
-            ResponseBody::Bytes(bytes) => match std::str::from_utf8(&bytes) {
-                Ok(v) => v.to_string(),
-                Err(_) => String::from("Received binary data that is not valid UTF-8"),
-            },
-        };
-        println!("{}", response_string);
-    }
-}
