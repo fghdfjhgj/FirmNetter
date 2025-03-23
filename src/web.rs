@@ -47,7 +47,30 @@ pub mod web {
             },
         }
     }
+    pub fn web_get<T>(url: T) -> Result<ResPost, Box<dyn Error>>
+    where
+        T: reqwest::IntoUrl,
+    {
+        let client = reqwest::blocking::Client::new();
+        let response = client.get(url).send()?;
+        let status_code = response.status().as_u16() as i32;
+        let content_type = response
+            .headers()
+            .get(CONTENT_TYPE)
+            .and_then(|ct| Option::from(ct.to_str().ok().unwrap_or("")))
+            .unwrap_or("");
+        // 处理响应体
+        let res_body = if content_type.contains("text/") || content_type.contains("json") {
+            // 如果内容类型为文本或JSON，则将响应体处理为文本
+            ResponseBody::Text(response.text()?)
+        } else {
+            // 否则，将响应体处理为字节流
+            ResponseBody::Bytes(response.bytes()?.to_vec())
+        };
 
+        // 返回包含状态码和响应体的结果
+        Ok(ResPost::new(status_code, res_body))
+    }
     /// 向指定URL发送POST请求，并根据响应内容类型处理响应体
     ///
     /// # Parameters
