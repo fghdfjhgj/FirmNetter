@@ -1,3 +1,4 @@
+#[cfg(feature = "flash_phone")]
 pub mod flash_phone {
     use crate::utils;
     use std::ffi::{CString, c_char};
