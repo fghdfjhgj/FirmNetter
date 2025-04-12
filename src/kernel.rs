@@ -1,4 +1,4 @@
-#[cfg(feature = "kernel")]
+
 pub mod kernel {
     use crate::other_utils::{cstring_to_string, str_to_cstr};
     use crate::utils::utils::c_exec;

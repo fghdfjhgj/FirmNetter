@@ -1,4 +1,4 @@
-#[cfg(feature = "web")]
+
 pub mod web {
     use reqwest::header::CONTENT_TYPE;
     use serde::Serialize;
