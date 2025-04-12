@@ -3,7 +3,7 @@ pub mod utils {
     use encoding_rs::GBK;
     use std::ffi::{c_char, CStr, CString};
     use std::path::Path;
-    use std::process::{Command, Stdio};
+    use std::process::{Command, Output, Stdio};
     use std::{fs, ptr};
     #[repr(C)]
     pub struct CCommandResult {
@@ -101,45 +101,30 @@ pub mod utils {
     pub fn exec<T: AsRef<str>>(command: T) -> CommandResult {
         let com_str = command.as_ref();
 
+        // 根据操作系统选择 shell 和参数
         #[cfg(target_os = "windows")]
-        let shell = "cmd";
+        let (shell, arg) = ("cmd", "/C");
         #[cfg(not(target_os = "windows"))]
-        let shell = "sh";
+        let (shell, arg) = ("sh", "-c");
 
-        #[cfg(target_os = "windows")]
-        let arg = "/C";
-        #[cfg(not(target_os = "windows"))]
-        let arg = "-c";
-
-        #[cfg(target_os = "windows")]
-        let all_com = com_str;
-        #[cfg(not(target_os = "windows"))]
-        let all_com = com_str.to_string();
-
-        let output = Command::new(shell)
+        // 执行命令并捕获输出
+        let output: Output = Command::new(shell)
             .arg(arg)
-            .arg(&all_com)
+            .arg(com_str)
             .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .output()
-            .expect("Failed to execute command");
+            .stderr(Stdio::piped()).output().unwrap();
 
-        // 处理输出
-        let (decoded_stdout, _, had_errors) = GBK.decode(&output.stdout);
-        let stdout = if had_errors {
-            println!("Decoding issues encountered for stdout.");
-            String::from_utf8_lossy(&output.stdout).into_owned()
-        } else {
-            decoded_stdout.into_owned()
-        };
 
-        let (decoded_stderr, _, had_errors) = GBK.decode(&output.stderr);
-        let stderr = if had_errors {
-            println!("Decoding issues encountered for stderr.");
-            String::from_utf8_lossy(&output.stderr).into_owned()
-        } else {
-            decoded_stderr.into_owned()
-        };
+        // 根据操作系统处理编码
+        #[cfg(target_os = "windows")]
+        let stdout = decode_output(&output.stdout);
+        #[cfg(not(target_os = "windows"))]
+        let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
+
+        #[cfg(target_os = "windows")]
+        let stderr = decode_output(&output.stderr);
+        #[cfg(not(target_os = "windows"))]
+        let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
 
         CommandResult::new(
             output.status.success(),
@@ -148,6 +133,20 @@ pub mod utils {
         )
     }
 
+    /// 在 Windows 下使用 GBK 解码字节流
+    #[cfg(target_os = "windows")]
+    fn decode_output(output: &[u8]) -> String {
+        use encoding::{DecoderTrap, Encoding};
+        use encoding::all::GBK;
+
+        match GBK.decode(output, DecoderTrap::Strict) {
+            Ok(s) => s,
+            Err(_) => {
+                eprintln!("Decoding issues encountered, falling back to UTF-8.");
+                String::from_utf8_lossy(output).into_owned()
+            }
+        }
+    }
     // 外部 C 接口
     #[unsafe(no_mangle)]
     pub extern "C" fn c_exec(command: *const c_char) -> CCommandResult {

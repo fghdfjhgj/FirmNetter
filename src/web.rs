@@ -8,13 +8,13 @@ pub mod web {
     use std::os::raw::c_char;
     use std::ptr;
 
-    #[derive(Debug)]
+
     pub struct ResPost {
         pub status_code: i32,
         pub body: ResponseBody,
     }
 
-    #[derive(Debug)]
+
     pub enum ResponseBody {
         Text(String),
         Bytes(Vec<u8>),
