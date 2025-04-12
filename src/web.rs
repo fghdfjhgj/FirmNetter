@@ -1,4 +1,3 @@
-
 pub mod web {
     use reqwest::header::CONTENT_TYPE;
     use serde::Serialize;
@@ -8,13 +7,13 @@ pub mod web {
     use std::os::raw::c_char;
     use std::ptr;
 
-
+    #[derive(Debug)]
     pub struct ResPost {
         pub status_code: i32,
         pub body: ResponseBody,
     }
 
-
+    #[derive(Debug)]
     pub enum ResponseBody {
         Text(String),
         Bytes(Vec<u8>),
@@ -229,12 +228,5 @@ pub mod web {
             }
         }
     }
-#[cfg(test)]
-
-    fn test_main(){
-    let url="http://api.1wxyun.com/?type=1";
-    let mut shuju =HashMap::new();
-    shuju.insert("Softid","0H9G1H8Q5O9G0H2Z");
-    web_post(url, shuju, false).expect("TODO: panic message");
-    }
 }
+
