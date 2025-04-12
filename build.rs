@@ -5,10 +5,6 @@ use std::path::PathBuf;
 
 fn main() {
     #[cfg(target_os = "windows")]{
-        println!("cargo:rustc-link-search=native=C:/Program Files/PostgreSQL/17/lib");
-
-        println!("cargo:rustc-link-lib=static=pq");
-
         // 获取目标目录（根据构建模式，可能是 target/debug 或 target/release）
         let out_dir = if cfg!(debug_assertions) {
             PathBuf::from(env::var("CARGO_TARGET_DIR").unwrap_or_else(|_| "target".into()))
@@ -17,7 +13,6 @@ fn main() {
             PathBuf::from(env::var("CARGO_TARGET_DIR").unwrap_or_else(|_| "target".into()))
                 .join("release")
         };
-
         // 打印 OUT_DIR 以便了解生成文件的位置
         println!("The OUT_DIR is: {}", out_dir.display());
 
@@ -51,6 +46,13 @@ fn main() {
     }
     #[cfg(not(target_os = "windows"))]
     {
+        let out_dir = if cfg!(debug_assertions) {
+            PathBuf::from(env::var("CARGO_TARGET_DIR").unwrap_or_else(|_| "target".into()))
+                .join("debug")
+        } else {
+            PathBuf::from(env::var("CARGO_TARGET_DIR").unwrap_or_else(|_| "target".into()))
+                .join("release")
+        };
         let crate_dir =
             env::var("CARGO_MANIFEST_DIR").expect("Could not find Cargo manifest directory");
 

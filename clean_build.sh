@@ -14,6 +14,7 @@ build_project() {
     cargo build --all-features
 
     # 检查构建结果
+    # shellcheck disable=SC2181
     if [ $? -ne 0 ]; then
         echo "Build failed! Check the error logs above for details."
         exit 1
