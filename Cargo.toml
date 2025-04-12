@@ -20,10 +20,5 @@ encoding_rs = "0.8.35"
 [build-dependencies]
 cbindgen = "0.28.0"
 
-[features]
-web = []
-utils = []
-flash_phone = ["utils"]
-kernel = ["utils"]
-default = ["utils"]
+
 
