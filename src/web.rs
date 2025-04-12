@@ -14,8 +14,8 @@ pub mod web {
         Utf8Error(std::str::Utf8Error),
     }
 
-    impl std::fmt::Display for WebError {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    impl fmt::Display for WebError {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             match self {
                 WebError::RequestError(e) => write!(f, "Request error: {}", e),
                 WebError::Utf8Error(e) => write!(f, "UTF-8 conversion error: {}", e),
