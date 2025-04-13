@@ -8,13 +8,13 @@ documentation = "https://github.com/fghdfjhgj/lib_rust/blob/main/README.md"
 license = "Apache-2.0"
 [lib]
 #rclib
-crate-type = ["cdylib","rclib","staticlib"]
+crate-type = ["cdylib","rlib","staticlib"]
 
 
 
 [dependencies]
 #rustls-tls or native-tls
-reqwest = { version = "0.12.12", features = ["blocking", "json", "stream", "rustls-tls"] }
+reqwest = { version = "0.12.12", features = ["blocking", "json", "stream", "native-tls"] }
 serde = { version = "1.0.217", features = ["derive"] }
 encoding_rs = "0.8.35"
 
