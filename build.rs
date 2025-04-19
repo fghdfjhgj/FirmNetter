@@ -4,7 +4,8 @@ use std::fs;
 use std::path::PathBuf;
 
 fn main() {
-    #[cfg(target_os = "windows")]{
+    #[cfg(target_os = "windows")]
+    {
         // 获取目标目录（根据构建模式，可能是 target/debug 或 target/release）
         let out_dir = if cfg!(debug_assertions) {
             PathBuf::from(env::var("CARGO_TARGET_DIR").unwrap_or_else(|_| "target".into()))
@@ -81,5 +82,4 @@ fn main() {
         }
     }
     // 告诉 Cargo 在哪里可以找到静态库
-
 }

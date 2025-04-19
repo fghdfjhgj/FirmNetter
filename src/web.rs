@@ -3,9 +3,9 @@ pub mod web {
     use serde::Serialize;
     use std::collections::HashMap;
     use std::ffi::{CStr, CString};
+    use std::fmt;
     use std::os::raw::c_char;
     use std::ptr;
-    use std::fmt;
 
     /// 自定义错误类型，用于封装可能的请求错误和 UTF-8 转换错误
     #[derive(Debug)]
@@ -78,7 +78,7 @@ pub mod web {
     pub fn web_post<T, B>(
         url: T,
         body: B,
-        way: bool, // true 表示 JSON 格式，false 表示表单格式
+        way: bool,       // true 表示 JSON 格式，false 表示表单格式
         raw_bytes: bool, // 是否获取原始字节
     ) -> Result<ResPost, WebError>
     where
@@ -108,7 +108,9 @@ pub mod web {
             let bytes = response.bytes()?;
             match std::str::from_utf8(&bytes) {
                 Ok(text) => ResponseBody::Text(text.to_string()),
-                Err(_) => ResponseBody::Text("Received binary data that is not valid UTF-8".to_string()),
+                Err(_) => {
+                    ResponseBody::Text("Received binary data that is not valid UTF-8".to_string())
+                }
             }
         };
 

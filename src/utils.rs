@@ -1,7 +1,6 @@
-
 pub mod utils {
     use encoding_rs::GBK;
-    use std::ffi::{c_char, CStr, CString};
+    use std::ffi::{CStr, CString, c_char};
     use std::path::Path;
     use std::process::{Command, Output, Stdio};
     use std::{fs, ptr};
@@ -43,7 +42,7 @@ pub mod utils {
         pub stderr: String,
     }
     impl CommandResult {
-        fn new(success: bool, stdout:String, stderr:String) -> Self {
+        fn new(success: bool, stdout: String, stderr: String) -> Self {
             CommandResult {
                 success,
                 stdout,
@@ -85,7 +84,7 @@ pub mod utils {
 
     /// 释放 `CCommandResult` 结构体中包含的 C 字符串内存
     #[unsafe(no_mangle)]
-     pub extern "C" fn free_command_result(result: CCommandResult) {
+    pub extern "C" fn free_command_result(result: CCommandResult) {
         result.free();
     }
 
@@ -112,8 +111,9 @@ pub mod utils {
             .arg(arg)
             .arg(com_str)
             .stdout(Stdio::piped())
-            .stderr(Stdio::piped()).output().unwrap();
-
+            .stderr(Stdio::piped())
+            .output()
+            .unwrap();
 
         // 根据操作系统处理编码
         #[cfg(target_os = "windows")]
@@ -126,18 +126,14 @@ pub mod utils {
         #[cfg(not(target_os = "windows"))]
         let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
 
-        CommandResult::new(
-            output.status.success(),
-            stdout,
-            stderr,
-        )
+        CommandResult::new(output.status.success(), stdout, stderr)
     }
 
     /// 在 Windows 下使用 GBK 解码字节流
     #[cfg(target_os = "windows")]
     fn decode_output(output: &[u8]) -> String {
-        use encoding::{DecoderTrap, Encoding};
         use encoding::all::GBK;
+        use encoding::{DecoderTrap, Encoding};
 
         match GBK.decode(output, DecoderTrap::Strict) {
             Ok(s) => s,
@@ -368,5 +364,4 @@ pub mod utils {
         // 这里我们使用 lossy 转换，以确保即使遇到无效的 UTF-8 字节也能生成一个 String
         String::from_utf8_lossy(&encoded_bytes).into_owned()
     }
-
 }
