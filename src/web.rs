@@ -7,7 +7,7 @@ pub mod web {
     use std::ptr;
     use std::fmt;
 
-    /// 自定义错误类型
+    /// 自定义错误类型，用于封装可能的请求错误和 UTF-8 转换错误
     #[derive(Debug)]
     pub enum WebError {
         RequestError(reqwest::Error),
@@ -37,21 +37,21 @@ pub mod web {
         }
     }
 
-    /// POST 响应结构体
+    /// POST 响应结构体，包含状态码和响应体
     #[derive(Debug)]
     pub struct ResPost {
         pub status_code: i32,
         pub body: ResponseBody,
     }
 
-    /// 响应体枚举
+    /// 响应体枚举，可以是文本或字节数组
     #[derive(Debug)]
     pub enum ResponseBody {
         Text(String),
         Bytes(Vec<u8>),
     }
 
-    /// 为 `ResponseBody` 实现 `std::fmt::Display`
+    /// 为 `ResponseBody` 实现 `std::fmt::Display`，以便于打印响应体内容
     impl fmt::Display for ResponseBody {
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             match self {
@@ -68,17 +68,18 @@ pub mod web {
     }
 
     impl ResPost {
+        /// 创建一个新的 `ResPost` 实例
         pub fn new(status_code: i32, body: ResponseBody) -> ResPost {
             ResPost { status_code, body }
         }
     }
 
-    /// 发送 HTTP POST 请求
+    /// 发送 HTTP POST 请求，支持 JSON 和表单数据两种方式
     pub fn web_post<T, B>(
         url: T,
         body: B,
-        way: bool,
-        raw_bytes: bool, // 新增参数：是否获取原始字节
+        way: bool, // true 表示 JSON 格式，false 表示表单格式
+        raw_bytes: bool, // 是否获取原始字节
     ) -> Result<ResPost, WebError>
     where
         T: reqwest::IntoUrl,
@@ -114,11 +115,11 @@ pub mod web {
         Ok(ResPost::new(status_code, res_body))
     }
 
-    /// C 结构体用于接收结果
+    /// C 结构体用于接收 HTTP POST 请求的结果
     #[repr(C)]
     pub struct CResPost {
         pub status_code: i32,
-        pub body_type: i32, // 0 for Text, 1 for Bytes
+        pub body_type: i32, // 0 表示文本，1 表示字节数组
         pub body_text: *const c_char,
         pub body_bytes: *const u8,
         pub body_len: usize,
@@ -133,7 +134,7 @@ pub mod web {
         form_data_count: usize,
         result: *mut CResPost,
         way: bool,
-        raw_bytes: bool, // 新增参数：是否获取原始字节
+        raw_bytes: bool, // 是否获取原始字节
     ) -> i32 {
         unsafe {
             // 将 C 字符串转换为 Rust 字符串
@@ -185,7 +186,7 @@ pub mod web {
         }
     }
 
-    /// 释放 C 字符串
+    /// 释放 C 字符串，避免内存泄漏
     #[unsafe(no_mangle)]
     pub extern "C" fn free_c_string(s: *mut c_char) {
         unsafe {
