@@ -9,11 +9,10 @@ pub mod web {
     use reqwest::header::{ACCEPT_RANGES, CONTENT_LENGTH, CONTENT_TYPE};
     use serde::Serialize;
     use std::collections::HashMap;
-    use std::ffi::{CStr, CString};
+    use std::ffi::{c_char, CStr, CString};
     use std::fmt;
     use std::fs::{metadata, rename, OpenOptions};
     use std::io::Read;
-    use std::os::raw::c_char;
     use std::path::Path;
     use std::ptr;
     use std::time::Duration;
