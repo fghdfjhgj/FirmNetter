@@ -1,24 +1,56 @@
+// src/lib.rs
 pub mod web {
-    use reqwest::header::CONTENT_TYPE;
+    use crossbeam::queue::ArrayQueue;
+    use memmap2::MmapMut;
+    use once_cell::sync::Lazy;
+    use rayon::iter::IntoParallelRefIterator;
+    use rayon::prelude::{IntoParallelRefMutIterator, ParallelIterator};
+    use reqwest::blocking::Client;
+    use reqwest::header::{ACCEPT_RANGES, CONTENT_LENGTH, CONTENT_TYPE};
     use serde::Serialize;
     use std::collections::HashMap;
     use std::ffi::{CStr, CString};
     use std::fmt;
+    use std::fs::{metadata, rename, OpenOptions};
+    use std::io::Read;
     use std::os::raw::c_char;
+    use std::path::Path;
     use std::ptr;
+    use std::time::Duration;
+    use rayon::iter::IndexedParallelIterator;
 
-    /// 自定义错误类型，用于封装可能的请求错误和 UTF-8 转换错误
+    // 全局HTTP客户端（复用连接池）
+    static GLOBAL_CLIENT: Lazy<Client> = Lazy::new(|| {
+        Client::builder()
+            .pool_max_idle_per_host(20)
+            .timeout(Duration::from_secs(30))
+            .build()
+            .unwrap()
+    });
+
+    // 错误类型增强
     #[derive(Debug)]
     pub enum WebError {
         RequestError(reqwest::Error),
         Utf8Error(std::str::Utf8Error),
+        Io(std::io::Error),
+        Server(String),
+        ValidationFailed,
+        BufferPoolEmpty, // 添加这一行
+        BufferPoolFull,
     }
 
     impl fmt::Display for WebError {
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             match self {
-                WebError::RequestError(e) => write!(f, "Request error: {}", e),
-                WebError::Utf8Error(e) => write!(f, "UTF-8 conversion error: {}", e),
+                Self::RequestError(e) => write!(f, "Request error: {}", e),
+                Self::Utf8Error(e) => write!(f, "UTF-8 conversion error: {}", e),
+                Self::Io(e) => write!(f, "IO error: {}", e),
+                Self::Server(e) => write!(f, "Server error: {}", e),
+                Self::ValidationFailed => write!(f, "File validation failed"),
+                _ => {
+                    Err(fmt::Error)
+                }
             }
         }
     }
@@ -37,21 +69,26 @@ pub mod web {
         }
     }
 
-    /// POST 响应结构体，包含状态码和响应体
+    impl From<std::io::Error> for WebError {
+        fn from(err: std::io::Error) -> Self {
+            WebError::Io(err)
+        }
+    }
+
+    // POST响应结构体
     #[derive(Debug)]
     pub struct ResPost {
         pub status_code: i32,
         pub body: ResponseBody,
     }
 
-    /// 响应体枚举，可以是文本或字节数组
+    // 响应体类型
     #[derive(Debug)]
     pub enum ResponseBody {
         Text(String),
         Bytes(Vec<u8>),
     }
 
-    /// 为 `ResponseBody` 实现 `std::fmt::Display`，以便于打印响应体内容
     impl fmt::Display for ResponseBody {
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             match self {
@@ -68,66 +105,57 @@ pub mod web {
     }
 
     impl ResPost {
-        /// 创建一个新的 `ResPost` 实例
         pub fn new(status_code: i32, body: ResponseBody) -> ResPost {
             ResPost { status_code, body }
         }
     }
 
-    /// 发送 HTTP POST 请求，支持 JSON 和表单数据两种方式
+    // HTTP POST接口
     pub fn web_post<T, B>(
         url: T,
         body: B,
-        way: bool,       // true 表示 JSON 格式，false 表示表单格式
-        raw_bytes: bool, // 是否获取原始字节
+        way: bool,
+        raw_bytes: bool,
     ) -> Result<ResPost, WebError>
     where
         T: reqwest::IntoUrl,
         B: Serialize,
     {
-        let client = reqwest::blocking::Client::new();
         let response = if way {
-            client.post(url).json(&body).send()?
+            GLOBAL_CLIENT.post(url).json(&body).send()?
         } else {
-            client.post(url).form(&body).send()?
+            GLOBAL_CLIENT.post(url).form(&body).send()?
         };
 
         let status_code = response.status().as_u16() as i32;
-        let content_type = response
-            .headers()
+        let content_type = response.headers()
             .get(CONTENT_TYPE)
             .and_then(|ct| ct.to_str().ok())
             .unwrap_or("");
 
-        // 根据 raw_bytes 参数决定如何处理响应体
         let res_body = if raw_bytes {
             ResponseBody::Bytes(response.bytes()?.to_vec())
-        } else if content_type.contains("text/") || content_type.contains("json") {
-            ResponseBody::Text(response.text()?)
         } else {
-            let bytes = response.bytes()?;
-            match std::str::from_utf8(&bytes) {
-                Ok(text) => ResponseBody::Text(text.to_string()),
-                Err(_) => {
-                    ResponseBody::Text("Received binary data that is not valid UTF-8".to_string())
-                }
+            match content_type {
+                t if t.contains("text/") || t.contains("json") =>
+                    ResponseBody::Text(response.text()?),
+                _ => ResponseBody::Bytes(response.bytes()?.to_vec())
             }
         };
 
         Ok(ResPost::new(status_code, res_body))
     }
 
-    /// C 结构体用于接收 HTTP POST 请求的结果
+    // C接口结构体
     #[repr(C)]
     pub struct CResPost {
         pub status_code: i32,
-        pub body_type: i32, // 0 表示文本，1 表示字节数组
+        pub body_type: i32,
         pub body_text: *const c_char,
         pub body_bytes: *const u8,
         pub body_len: usize,
     }
 
-    /// C 接口函数：执行 HTTP POST 请求
     #[unsafe(no_mangle)]
     pub extern "C" fn c_web_post(
         url: *const c_char,
@@ -136,65 +164,240 @@ pub mod web {
         form_data_count: usize,
         result: *mut CResPost,
         way: bool,
-        raw_bytes: bool, // 是否获取原始字节
+        raw_bytes: bool,
     ) -> i32 {
         unsafe {
-            // 将 C 字符串转换为 Rust 字符串
-            let url = match CStr::from_ptr(url).to_str() {
-                Ok(u) => u.to_owned(),
-                Err(_) => return 1, // 转换失败
+            let url_str = match CStr::from_ptr(url).to_str() {
+                Ok(s) => s,
+                Err(_) => return 1,
             };
 
-            // 构建表单数据的 HashMap
-            let mut form_data = HashMap::new();
-            for i in 0..form_data_count {
-                let key = match CStr::from_ptr(*form_data_keys.offset(i as isize)).to_str() {
-                    Ok(k) => k.to_owned(),
-                    Err(_) => return 1, // 转换失败
+            let keys = std::slice::from_raw_parts(form_data_keys, form_data_count);
+            let values = std::slice::from_raw_parts(form_data_values, form_data_count);
+
+            let mut form_data = HashMap::with_capacity(form_data_count);
+            for (k, v) in keys.iter().zip(values.iter()) {
+                let key = match CStr::from_ptr(*k).to_str() {
+                    Ok(s) => s,
+                    Err(_) => return 1,
                 };
-                let value = match CStr::from_ptr(*form_data_values.offset(i as isize)).to_str() {
-                    Ok(v) => v.to_owned(),
-                    Err(_) => return 1, // 转换失败
+                let value = match CStr::from_ptr(*v).to_str() {
+                    Ok(s) => s,
+                    Err(_) => return 1,
                 };
-                form_data.insert(key, value);
+                form_data.insert(key.to_owned(), value.to_owned());
             }
 
-            // 调用核心请求逻辑并处理结果
-            match web_post(&url, &form_data, way, raw_bytes) {
+            match web_post(url_str, &form_data, way, raw_bytes) {
                 Ok(res_post) => {
-                    // 填充响应状态码
-                    (*result).status_code = res_post.status_code;
+                    let result_ref = &mut *result;
+                    result_ref.status_code = res_post.status_code;
 
-                    // 根据响应体类型填充不同字段
                     match res_post.body {
                         ResponseBody::Text(text) => {
-                            (*result).body_type = 0;
-                            let c_string = CString::new(text).unwrap();
-                            (*result).body_text = c_string.into_raw();
-                            (*result).body_bytes = ptr::null();
-                            (*result).body_len = 0;
+                            result_ref.body_type = 0;
+                            let c_str = CString::new(text).unwrap_or_else(|_| CString::new("Invalid UTF-8").unwrap());
+                            result_ref.body_text = c_str.into_raw();
+                            result_ref.body_bytes = ptr::null();
+                            result_ref.body_len = 0;
                         }
                         ResponseBody::Bytes(bytes) => {
-                            (*result).body_type = 1;
-                            (*result).body_text = ptr::null();
-                            (*result).body_bytes = bytes.as_ptr();
-                            (*result).body_len = bytes.len();
+                            result_ref.body_type = 1;
+                            result_ref.body_text = ptr::null();
+                            result_ref.body_bytes = bytes.as_ptr();
+                            result_ref.body_len = bytes.len();
                         }
                     }
-                    0 // 成功
+                    0
                 }
-                Err(_) => 1, // 失败
+                Err(_) => 1,
             }
         }
     }
 
-    /// 释放 C 字符串，避免内存泄漏
     #[unsafe(no_mangle)]
     pub extern "C" fn free_c_string(s: *mut c_char) {
         unsafe {
             if !s.is_null() {
-                let _ = CString::from_raw(s); // 自动释放内存
+                let _ = CString::from_raw(s);
             }
+        }
+    }
+
+    // 下载结果简化版
+    #[derive(Debug)]
+    pub struct DownloadResult {
+        pub threads_used: usize,
+        pub save_path: String,
+        pub file_name: String,
+    }
+
+    // 下载实现优化版
+    pub fn download_file<T: AsRef<str>, P: AsRef<Path>>(
+        url: T,
+        save_path: P,
+        requested_threads: usize,
+        buffer_pool: &BufferPool,
+    ) -> Result<DownloadResult, WebError> {
+        let url = url.as_ref();
+        let original_path = save_path.as_ref().to_path_buf();
+        let temp_path = original_path.with_extension("download");
+
+        // 获取文件信息
+        let response = GLOBAL_CLIENT.head(url).send()?;
+        let supports_chunked = response.headers()
+            .get(ACCEPT_RANGES)
+            .map_or(false, |v| v == "bytes");
+        let total_size = response.headers()
+            .get(CONTENT_LENGTH)
+            .and_then(|ct| ct.to_str().ok())
+            .and_then(|ct| ct.parse().ok())
+            .ok_or(WebError::Server("Missing Content-Length".into()))?;
+
+        // 创建临时文件并设置大小
+        let file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .open(&temp_path)?;
+        file.set_len(total_size)?;
+
+        // 使用内存映射
+        let mut mem_map = unsafe { MmapMut::map_mut(&file) }.map_err(WebError::from)?;
+
+        // 单线程下载（当服务器不支持分块时）
+        if !supports_chunked {
+            let mut response = GLOBAL_CLIENT.get(url).send()?;
+            let mut file = OpenOptions::new().write(true).open(&temp_path)?;
+            std::io::copy(&mut response, &mut file)?;
+            validate_file(&temp_path, total_size)?;
+            rename(&temp_path, &original_path)?;
+
+            let file_name = original_path.file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("unknown_file")
+                .to_string();
+            let save_path = original_path.to_string_lossy().into_owned();
+
+            return Ok(DownloadResult {
+                threads_used: 1,
+                save_path,
+                file_name,
+            });
+        }
+
+        // 多线程下载
+        let actual_threads = optimal_thread_count(requested_threads, total_size);
+        let chunks = balanced_chunks(total_size, actual_threads);
+
+        // 将 mem_map 按照分块分割成多个可变切片
+        let mut slices: Vec<&mut [u8]> = Vec::with_capacity(chunks.len());
+        let mut remaining_mem_map = &mut mem_map[..];
+        for &(start, end) in &chunks {
+            let (left, right) = remaining_mem_map.split_at_mut((end - start) as usize);
+            slices.push(left);
+            remaining_mem_map = right;
+        }
+
+        // 并行处理每个分块
+        chunks.par_iter().zip(slices.par_iter_mut()).try_for_each(|(&(start, end), slice)| {
+            let client = GLOBAL_CLIENT.clone();
+            let mut response = client.get(url)
+                .header("Range", format!("bytes={}-{}", start, end))
+                .send()?;
+
+            let mut buffer = buffer_pool.get()?; // 从池中获取缓冲区
+
+            loop {
+                let read = response.read(&mut buffer)?;
+                if read == 0 { break; }
+                // 直接操作当前分块的切片
+                slice[0..read].copy_from_slice(&buffer[..read]);
+            }
+
+            buffer_pool.put(buffer)?; // 将缓冲区归还到池中
+            Ok::<(), WebError>(())
+        })?;
+
+        // 确保内存映射的内容写入磁盘
+        mem_map.flush().map_err(WebError::from)?;
+
+        // 验证和重命名
+        validate_file(&temp_path, total_size)?;
+        rename(&temp_path, &original_path)?;
+
+        let file_name = original_path.file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("unknown_file")
+            .to_string();
+        let save_path = original_path.to_string_lossy().into_owned();
+
+        Ok(DownloadResult {
+            threads_used: actual_threads,
+            save_path,
+            file_name,
+        })
+    }
+
+    // 缓冲区池实现
+    pub struct BufferPool {
+        pool: ArrayQueue<Vec<u8>>,
+        buffer_size: usize,
+    }
+
+    impl BufferPool {
+        pub fn get(&self) -> Result<Vec<u8>, WebError> {
+            if let Some(buf) = self.pool.pop() {
+                Ok(buf)
+            } else {
+                // 如果缓冲区池为空，创建一个新的缓冲区
+                Ok(vec![0; self.buffer_size])
+            }
+        }
+
+        pub fn put(&self, mut buf: Vec<u8>) -> Result<(), WebError> {
+            buf.clear();
+            buf.resize(self.buffer_size, 0);
+            self.pool.push(buf).map_err(|_| WebError::BufferPoolFull)
+        }
+    }
+
+    // 辅助函数
+    fn optimal_thread_count(requested: usize, total: u64) -> usize {
+        let cpu_cores = rayon::current_num_threads();
+        let size_based = (total / (1024 * 1024 * 10)) as usize; // 10MB per thread
+        requested.clamp(1, cpu_cores.min(size_based).max(1))
+    }
+
+    const MIN_CHUNK_SIZE: u64 = 1024 * 1024; // 最小分块大小为 1MB
+
+    fn balanced_chunks(total: u64, threads: usize) -> Vec<(u64, u64)> {
+        let mut chunks = Vec::with_capacity(threads);
+        let mut remaining = total;
+        let mut start = 0;
+
+        for i in 0..threads {
+            let chunk_size = if i == threads - 1 {
+                remaining // 最后一个分块包含剩余的所有数据
+            } else {
+                (remaining / (threads - i) as u64).max(MIN_CHUNK_SIZE)
+            };
+
+            let end = start + chunk_size - 1;
+            chunks.push((start, end));
+            start += chunk_size;
+            remaining -= chunk_size;
+        }
+
+        chunks
+    }
+
+    fn validate_file(path: &Path, expected: u64) -> Result<(), WebError> {
+        let actual = metadata(path)?.len();
+        if actual != expected {
+            Err(WebError::ValidationFailed)
+        } else {
+            Ok(())
         }
     }
 }
