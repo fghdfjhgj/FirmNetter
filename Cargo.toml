@@ -1,6 +1,6 @@
 [package]
 name = "firm_netter"
-version = "0.1.7"
+version = "0.1.8"
 edition = "2024"
 description = "测试，请勿使用！"
 repository = "https://github.com/fghdfjhgj/lib_rust"
