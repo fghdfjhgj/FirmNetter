@@ -1,19 +1,19 @@
 // src/lib.rs
 pub mod web {
-    use rayon::prelude::*;
-    use rayon::iter::IndexedParallelIterator;
     use crossbeam::queue::ArrayQueue;
     use memmap2::MmapMut;
     use once_cell::sync::Lazy;
+    use rayon::iter::IndexedParallelIterator;
     use rayon::iter::IntoParallelRefIterator;
     use rayon::prelude::IntoParallelRefMutIterator;
+    use rayon::prelude::*;
     use reqwest::blocking::Client;
     use reqwest::header::{ACCEPT_RANGES, CONTENT_LENGTH, CONTENT_TYPE};
     use serde::Serialize;
     use std::collections::HashMap;
-    use std::ffi::{c_char, CStr, CString};
+    use std::ffi::{CStr, CString, c_char};
     use std::fmt;
-    use std::fs::{metadata, rename, OpenOptions};
+    use std::fs::{OpenOptions, metadata, rename};
     use std::io::Read;
     use std::path::Path;
     use std::ptr;
@@ -111,12 +111,7 @@ pub mod web {
     }
 
     // HTTP POST接口
-    pub fn web_post<T, B>(
-        url: T,
-        body: B,
-        way: bool,
-        raw_bytes: bool,
-    ) -> Result<ResPost, WebError>
+    pub fn web_post<T, B>(url: T, body: B, way: bool, raw_bytes: bool) -> Result<ResPost, WebError>
     where
         T: reqwest::IntoUrl,
         B: Serialize,
@@ -128,7 +123,8 @@ pub mod web {
         };
 
         let status_code = response.status().as_u16() as i32;
-        let content_type = response.headers()
+        let content_type = response
+            .headers()
             .get(CONTENT_TYPE)
             .and_then(|ct| ct.to_str().ok())
             .unwrap_or("");
@@ -137,9 +133,10 @@ pub mod web {
             ResponseBody::Bytes(response.bytes()?.to_vec())
         } else {
             match content_type {
-                t if t.contains("text/") || t.contains("json") =>
-                    ResponseBody::Text(response.text()?),
-                _ => ResponseBody::Bytes(response.bytes()?.to_vec())
+                t if t.contains("text/") || t.contains("json") => {
+                    ResponseBody::Text(response.text()?)
+                }
+                _ => ResponseBody::Bytes(response.bytes()?.to_vec()),
             }
         };
 
@@ -197,7 +194,8 @@ pub mod web {
                     match res_post.body {
                         ResponseBody::Text(text) => {
                             result_ref.body_type = 0;
-                            let c_str = CString::new(text).unwrap_or_else(|_| CString::new("Invalid UTF-8").unwrap());
+                            let c_str = CString::new(text)
+                                .unwrap_or_else(|_| CString::new("Invalid UTF-8").unwrap());
                             result_ref.body_text = c_str.into_raw();
                             result_ref.body_bytes = ptr::null();
                             result_ref.body_len = 0;
@@ -246,10 +244,12 @@ pub mod web {
         let temp_path = original_path.with_extension("download");
 
         let response = GLOBAL_CLIENT.head(url).send()?;
-        let supports_chunked = response.headers()
+        let supports_chunked = response
+            .headers()
             .get(ACCEPT_RANGES)
             .map_or(false, |v| v == "bytes");
-        let total_size = response.headers()
+        let total_size = response
+            .headers()
             .get(CONTENT_LENGTH)
             .and_then(|ct| ct.to_str().ok())
             .and_then(|ct| ct.parse().ok())
@@ -271,7 +271,8 @@ pub mod web {
             validate_file(&temp_path, total_size)?;
             rename(&temp_path, &original_path)?;
 
-            let file_name = original_path.file_name()
+            let file_name = original_path
+                .file_name()
                 .and_then(|n| n.to_str())
                 .unwrap_or("unknown_file")
                 .to_string();
@@ -295,11 +296,12 @@ pub mod web {
             remaining_mem_map = right;
         }
 
-        chunks.par_iter()
-            .zip(slices.par_iter_mut())
-            .try_for_each(|((start, end), slice)| -> Result<(), WebError> { // 显式声明闭包返回类型
+        chunks.par_iter().zip(slices.par_iter_mut()).try_for_each(
+            |((start, end), slice)| -> Result<(), WebError> {
+                // 显式声明闭包返回类型
                 let client = GLOBAL_CLIENT.clone();
-                let mut response = client.get(url)
+                let mut response = client
+                    .get(url)
                     .header("Range", format!("bytes={}-{}", start, end))
                     .send()?;
 
@@ -307,19 +309,23 @@ pub mod web {
 
                 loop {
                     let read = response.read(&mut buffer)?;
-                    if read == 0 { break; }
+                    if read == 0 {
+                        break;
+                    }
                     slice[0..read].copy_from_slice(&buffer[..read]);
                 }
 
                 buffer_pool.put(buffer)?;
                 Ok(()) // 现在能明确推断为Result<(), WebError>
-            })?;
+            },
+        )?;
 
         mem_map.flush()?;
         validate_file(&temp_path, total_size)?;
         rename(&temp_path, &original_path)?;
 
-        let file_name = original_path.file_name()
+        let file_name = original_path
+            .file_name()
             .and_then(|n| n.to_str())
             .unwrap_or("unknown_file")
             .to_string();
@@ -397,6 +403,56 @@ pub mod web {
             Err(WebError::ValidationFailed)
         } else {
             Ok(())
+        }
+    }
+    // C 结构体定义
+    #[repr(C)]
+    pub struct CDownloadResult {
+        pub threads_used: usize,
+        pub save_path: *const c_char,
+        pub file_name: *const c_char,
+    }
+
+    // FFI 函数实现
+    #[no_mangle]
+    pub extern "C" fn c_download_file(
+        url: *const c_char,
+        save_path: *const c_char,
+        requested_threads: usize,
+        buffer_pool_size: usize,
+        buffer_size: usize,
+        result: *mut CDownloadResult,
+    ) -> i32 {
+        unsafe {
+            let url_str = match CStr::from_ptr(url).to_str() {
+                Ok(s) => s,
+                Err(_) => return 1,
+            };
+
+            let save_path_str = match CStr::from_ptr(save_path).to_str() {
+                Ok(s) => s,
+                Err(_) => return 1,
+            };
+
+            let buffer_pool = BufferPool::new(buffer_pool_size, buffer_size);
+
+            match download_file(url_str, save_path_str, requested_threads, &buffer_pool) {
+                Ok(download_result) => {
+                    let result_ref = &mut *result;
+                    result_ref.threads_used = download_result.threads_used;
+
+                    let c_save_path = CString::new(download_result.save_path)
+                        .unwrap_or_else(|_| CString::new("Invalid UTF-8").unwrap());
+                    let c_file_name = CString::new(download_result.file_name)
+                        .unwrap_or_else(|_| CString::new("Invalid UTF-8").unwrap());
+
+                    result_ref.save_path = c_save_path.into_raw();
+                    result_ref.file_name = c_file_name.into_raw();
+
+                    0
+                }
+                Err(_) => 1,
+            }
         }
     }
 }
