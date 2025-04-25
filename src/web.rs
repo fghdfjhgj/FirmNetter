@@ -1,4 +1,4 @@
-// src/lib.rs
+// src/web.rs
 pub mod web {
     use crossbeam::queue::ArrayQueue;
     use memmap2::MmapMut;
@@ -226,7 +226,7 @@ fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     // 定义一个对外的C接口函数，用于执行POST请求
     // 该函数接收URL、表单数据的键值对、结果容器、请求方式和是否返回原始字节的标志
     // 返回一个整数表示操作是否成功
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn c_web_post(
         url: *const c_char,
         form_data_keys: *const *const c_char,
