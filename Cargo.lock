@@ -320,6 +320,7 @@ dependencies = [
  "encoding_rs",
  "memmap2",
  "once_cell",
+ "percent-encoding",
  "rayon",
  "reqwest",
  "serde",
