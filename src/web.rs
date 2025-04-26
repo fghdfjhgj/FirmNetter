@@ -444,7 +444,7 @@ pub mod web {
         requested.clamp(1, cpu_cores.min(size_based).max(1))
     }
 
-    const MIN_CHUNK_SIZE: u64 = 1024 * 1024;
+    const MIN_CHUNK_SIZE: u64 = 1;
 
     /// 根据总工作量和线程数，将工作量分成均衡的块
     /// 此函数旨在尽可能均匀地分配工作量，以优化多线程处理
@@ -458,36 +458,36 @@ pub mod web {
     ///
     /// 返回一个包含每个线程处理的工作量范围的向量元组
     /// 每个元组包含开始和结束位置，表示该线程应处理的工作量范围
-    fn balanced_chunks(total: u64, threads: usize) -> Vec<(u64, u64)> {
-        // 初始化容量为线程数的向量，用于存储每个线程的工作量范围
-        let mut chunks = Vec::with_capacity(threads);
-        // 初始化剩余工作量为总工作量
+    fn balanced_chunks(total: u64, requested_threads: usize) -> Vec<(u64, u64)> {
+        let mut chunks = Vec::new();
         let mut remaining = total;
-        // 初始化起始位置为0
         let mut start = 0;
 
-        // 遍历每个线程，分配工作量范围
-        for i in 0..threads {
-            // 计算当前线程的工作量大小
-            // 如果是最后一个线程，分配所有剩余工作量
-            // 否则，计算平均工作量，并确保最小工作量不小于预设的最小值
-            let chunk_size = if i == threads - 1 {
+        // 计算最大合理线程数
+        let max_reasonable = (total / MIN_CHUNK_SIZE.max(1)) as usize;
+        let actual_threads = requested_threads
+            .clamp(1, max_reasonable.max(1)) // 保证max >= min
+            .min(rayon::current_num_threads());
+
+        for i in 0..actual_threads {
+            let chunk_size = if i == actual_threads - 1 {
                 remaining
             } else {
-                (remaining / (threads - i) as u64).max(MIN_CHUNK_SIZE)
+                let avg = remaining / (actual_threads - i) as u64;
+                avg.max(MIN_CHUNK_SIZE).min(remaining)
             };
 
-            // 计算当前线程工作量的结束位置
-            let end = start + chunk_size - 1;
-            // 将当前线程的工作量范围添加到向量中
+            let end = start + chunk_size.saturating_sub(1);
             chunks.push((start, end));
-            // 更新起始位置为下一个线程的工作量开始处
+
             start += chunk_size;
-            // 更新剩余工作量
-            remaining -= chunk_size;
+            remaining = remaining.saturating_sub(chunk_size);
+
+            if remaining == 0 {
+                break;
+            }
         }
 
-        // 返回每个线程的工作量范围
         chunks
     }
 
@@ -651,11 +651,11 @@ pub mod web {
     }
     #[test]
     fn test_download_file() {
-        let url = "http://127.0.0.1:5244/d/home/sunyuze/work/home/sunyuze/work/sun/vite.config.ts?sign=FEprMHj6xCMfEEkcGSgt6Zw7nFtpKgqqpURTXHQfcSE=:0";
+        let url = "http://127.0.0.1:5244/d/home/sunyuze/work/home/sunyuze/work/sun_vpn/vite.config.ts?sign=fCBoNURVB5Fp_DwUlqvBw_O1RyUuXWnKozFOPINaJPY=:0";
         let save_path = "/home/sunyuze/Downloads/";
-        let threads = 4;
+        let threads = 0;
         let pool = BufferPool::new(10, 1024 * 1024);
-        let res = download_file(url, save_path, threads, false, &pool);
+        let res = download_file(url, save_path, threads, true, &pool);
         let save = res.unwrap().threads_used;
         println!("{}", save)
     }
