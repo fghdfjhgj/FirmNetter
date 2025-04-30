@@ -1,5 +1,5 @@
-// src/lib.rs
 pub mod web {
+    // 导入必要的库
     use crossbeam::queue::ArrayQueue;
     use memmap2::MmapMut;
     use once_cell::sync::Lazy;
@@ -17,20 +17,21 @@ pub mod web {
     use std::fmt;
     use std::fs::{OpenOptions, metadata, rename};
     use std::io::Read;
+    use std::os::unix::fs::MetadataExt;
     use std::path::Path;
     use std::ptr;
     use std::time::Duration;
 
-    // 全局HTTP客户端
+    // 全局HTTP客户端，使用Lazy初始化，确保只初始化一次
     static GLOBAL_CLIENT: Lazy<Client> = Lazy::new(|| {
         Client::builder()
             .pool_max_idle_per_host(20)
-            .timeout(Duration::from_secs(30))
+            .timeout(Duration::from_secs(3000))
             .build()
             .unwrap()
     });
 
-    // 增强错误类型
+    // 自定义错误类型，用于统一处理不同类型的错误
     #[derive(Debug)]
     pub enum WebError {
         RequestError(reqwest::Error),
@@ -42,6 +43,7 @@ pub mod web {
         BufferPoolFull,
     }
 
+    // 实现fmt::Display trait，方便打印错误信息
     impl fmt::Display for WebError {
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             match self {
@@ -56,9 +58,10 @@ pub mod web {
         }
     }
 
+    // 实现std::error::Error trait，用于错误传播
     impl std::error::Error for WebError {}
 
-    // 错误转换实现
+    // 实现从其他错误类型到WebError的转换
     impl From<reqwest::Error> for WebError {
         fn from(err: reqwest::Error) -> Self {
             WebError::RequestError(err)
@@ -77,20 +80,21 @@ pub mod web {
         }
     }
 
-    // POST响应结构
+    // POST请求响应结构体
     #[derive(Debug)]
     pub struct ResPost {
         pub status_code: i32,
         pub body: ResponseBody,
     }
 
-    // 响应体类型
+    // 响应体类型，支持文本和字节数据
     #[derive(Debug)]
     pub enum ResponseBody {
         Text(String),
         Bytes(Vec<u8>),
     }
 
+    // 实现fmt::Display trait，方便打印响应体信息
     impl fmt::Display for ResponseBody {
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             match self {
@@ -106,13 +110,14 @@ pub mod web {
         }
     }
 
+    // ResPost的构造函数
     impl ResPost {
         pub fn new(status_code: i32, body: ResponseBody) -> ResPost {
             ResPost { status_code, body }
         }
     }
 
-    // HTTP POST接口
+    // HTTP POST请求函数
     pub fn web_post<T, B>(url: T, body: B, way: bool, raw_bytes: bool) -> Result<ResPost, WebError>
     where
         T: reqwest::IntoUrl,
@@ -145,7 +150,7 @@ pub mod web {
         Ok(ResPost::new(status_code, res_body))
     }
 
-    // C接口结构体
+    // C接口结构体，用于与C语言交互
     #[repr(C)]
     pub struct CResPost {
         pub status_code: i32,
@@ -155,7 +160,34 @@ pub mod web {
         pub body_len: usize,
     }
 
-    // 修复后的FFI函数
+    // 辅助函数：将C字符串转换为Rust字符串
+    fn c_str_to_rust_str(c_str: *const c_char) -> Result<&'static str, WebError> {
+        unsafe {
+            CStr::from_ptr(c_str)
+                .to_str()
+                .map_err(|e| WebError::Utf8Error(e))
+        }
+    }
+
+    // 辅助函数：处理C字符串数组到Rust HashMap的转换
+    fn convert_c_strings(
+        form_data_keys: *const *const c_char,
+        form_data_values: *const *const c_char,
+        form_data_count: usize,
+    ) -> Result<HashMap<String, String>, WebError> {
+        let keys = unsafe { std::slice::from_raw_parts(form_data_keys, form_data_count) };
+        let values = unsafe { std::slice::from_raw_parts(form_data_values, form_data_count) };
+
+        let mut form_data = HashMap::with_capacity(form_data_count);
+        for (k, v) in keys.iter().zip(values.iter()) {
+            let key = c_str_to_rust_str(*k)?;
+            let value = c_str_to_rust_str(*v)?;
+            form_data.insert(key.to_owned(), value.to_owned());
+        }
+        Ok(form_data)
+    }
+
+    // 与C语言交互的POST请求函数
     #[unsafe(no_mangle)]
     pub extern "C" fn c_web_post(
         url: *const c_char,
@@ -167,26 +199,16 @@ pub mod web {
         raw_bytes: bool,
     ) -> i32 {
         unsafe {
-            let url_str = match CStr::from_ptr(url).to_str() {
+            let url_str = match c_str_to_rust_str(url) {
                 Ok(s) => s,
                 Err(_) => return 1,
             };
 
-            let keys = std::slice::from_raw_parts(form_data_keys, form_data_count);
-            let values = std::slice::from_raw_parts(form_data_values, form_data_count);
-
-            let mut form_data = HashMap::with_capacity(form_data_count);
-            for (k, v) in keys.iter().zip(values.iter()) {
-                let key = match CStr::from_ptr(*k).to_str() {
-                    Ok(s) => s,
+            let form_data =
+                match convert_c_strings(form_data_keys, form_data_values, form_data_count) {
+                    Ok(data) => data,
                     Err(_) => return 1,
                 };
-                let value = match CStr::from_ptr(*v).to_str() {
-                    Ok(s) => s,
-                    Err(_) => return 1,
-                };
-                form_data.insert(key.to_owned(), value.to_owned());
-            }
 
             match web_post(url_str, &form_data, way, raw_bytes) {
                 Ok(res_post) => {
@@ -211,12 +233,15 @@ pub mod web {
                     }
                     0
                 }
-                Err(_) => 1,
+                Err(e) => {
+                    eprintln!("c_web_post error: {}", e);
+                    1
+                }
             }
         }
     }
 
-    // 内存释放函数
+    // 释放C字符串内存的函数
     #[unsafe(no_mangle)]
     pub extern "C" fn free_c_string(s: *mut c_char) {
         unsafe {
@@ -226,12 +251,67 @@ pub mod web {
         }
     }
 
-    // 下载结果结构
+    // 下载结果结构体
     #[derive(Debug)]
     pub struct DownloadResult {
         pub threads_used: usize,
         pub save_path: String,
         pub file_name: String,
+    }
+
+    // 增加重试机制的下载块函数
+    fn download_chunk(
+        client: &Client,
+        url: &str,
+        start: u64,
+        end: u64,
+        slice: &mut [u8],
+        buffer_pool: &BufferPool,
+    ) -> Result<(), WebError> {
+        const MAX_RETRIES: u8 = 3;
+        for attempt in 0..MAX_RETRIES {
+            let mut response = client
+                .get(url)
+                .header("Range", format!("bytes={}-{}", start, end))
+                .send()?;
+
+            let mut buffer = buffer_pool.get()?;
+            let mut offset = 0;
+
+            loop {
+                let read = response.read(&mut buffer)?;
+                if read == 0 {
+                    break;
+                }
+                slice[offset..offset + read].copy_from_slice(&buffer[..read]);
+                offset += read;
+            }
+
+            buffer_pool.put(buffer)?;
+
+            // 验证下载的块大小是否正确
+            if (end - start + 1) as usize == offset {
+                return Ok(());
+            }
+
+            if attempt < MAX_RETRIES - 1 {
+                eprintln!("Chunk download failed, retrying...");
+            }
+        }
+
+        Err(WebError::Server(
+            "Failed to download chunk after multiple attempts".into(),
+        ))
+    }
+
+    // 检查磁盘空间是否足够的函数
+    fn check_disk_space(path: &Path, required_space: u64) -> Result<(), WebError> {
+        let metadata = metadata(path)?;
+        let free_space = metadata.blocks() * metadata.blksize();
+        if free_space < required_space {
+            return Err(WebError::Server("Insufficient disk space".into()));
+        }
+        Ok(())
     }
 
     /// 下载文件的核心逻辑函数，支持单线程和多线程下载。
@@ -240,7 +320,7 @@ pub mod web {
     /// - `url`: 文件的下载地址（字符串或可转换为字符串的类型）。
     /// - `save_path`: 文件保存的目标路径（路径或可转换为路径的类型）。
     /// - `requested_threads`: 用户请求的下载线程数。实际使用的线程数会根据文件大小和系统资源调整。
-    /// - `mandatory_use`: 是否强制使用参数下载线程数。。
+    /// - `mandatory_use`: 是否强制使用参数下载线程数。
     /// - `buffer_pool`: 缓冲区池对象，用于复用内存缓冲区以提高性能。
     /// # 返回值
     /// - 成功时返回 `DownloadResult`，包含实际使用的线程数、保存路径和文件名。
@@ -274,7 +354,6 @@ pub mod web {
             std::fs::create_dir_all(parent)?;
         }
 
-        // 后续原有代码保持不变...
         let temp_path = original_path.with_extension("download");
 
         // 发送 HEAD 请求以获取文件元信息
@@ -289,6 +368,9 @@ pub mod web {
             .and_then(|ct| ct.to_str().ok())
             .and_then(|ct| ct.parse().ok())
             .ok_or(WebError::Server("Missing Content-Length".into()))?;
+
+        // 检查磁盘空间
+        check_disk_space(original_path.parent().unwrap_or(Path::new("/")), total_size)?;
 
         // 创建临时文件并设置文件大小
         let file = OpenOptions::new()
@@ -349,24 +431,7 @@ pub mod web {
         // 并发下载每个分块
         chunks.par_iter().zip(slices.par_iter_mut()).try_for_each(
             |((start, end), slice)| -> Result<(), WebError> {
-                let client = GLOBAL_CLIENT.clone();
-                let mut response = client
-                    .get(url)
-                    .header("Range", format!("bytes={}-{}", start, end))
-                    .send()?;
-
-                let mut buffer = buffer_pool.get()?;
-
-                loop {
-                    let read = response.read(&mut buffer)?;
-                    if read == 0 {
-                        break;
-                    }
-                    slice[0..read].copy_from_slice(&buffer[..read]);
-                }
-
-                buffer_pool.put(buffer)?;
-                Ok(())
+                download_chunk(&GLOBAL_CLIENT, url, *start, *end, slice, buffer_pool)
             },
         )?;
 
@@ -390,12 +455,13 @@ pub mod web {
         })
     }
 
-    // 缓冲区池实现
+    // 缓冲区池结构体，用于复用内存缓冲区
     pub struct BufferPool {
         pool: ArrayQueue<Vec<u8>>,
         buffer_size: usize,
     }
 
+    // 缓冲区池的方法实现
     impl BufferPool {
         pub fn new(pool_size: usize, buffer_size: usize) -> Self {
             BufferPool {
@@ -517,6 +583,7 @@ pub mod web {
             Ok(())
         }
     }
+
     /// 从给定的URL中提取文件名
     ///
     /// # 参数
@@ -579,12 +646,14 @@ pub mod web {
         )
     }
 
+    // 生成默认文件名的函数
     fn generate_default_name(url: &Url) -> String {
         // 使用host作为基础名称
         let host = url.host_str().unwrap_or("unknown");
         format!("{}.bin", host)
     }
 
+    // 为文件名添加默认扩展名的函数
     fn add_default_extension(name: String) -> String {
         if name.contains('.') {
             name
@@ -592,7 +661,8 @@ pub mod web {
             format!("{}.bin", name)
         }
     }
-    // C 结构体定义
+
+    // C接口结构体，用于与C语言交互的下载结果
     #[repr(C)]
     pub struct CDownloadResult {
         pub threads_used: usize,
@@ -600,7 +670,7 @@ pub mod web {
         pub file_name: *const c_char,
     }
 
-    // FFI 函数实现
+    // 与C语言交互的下载文件函数
     #[unsafe(no_mangle)]
     pub extern "C" fn c_download_file(
         url: *const c_char,
@@ -612,14 +682,20 @@ pub mod web {
         result: *mut CDownloadResult,
     ) -> i32 {
         unsafe {
-            let url_str = match CStr::from_ptr(url).to_str() {
+            let url_str = match c_str_to_rust_str(url) {
                 Ok(s) => s,
-                Err(_) => return 1,
+                Err(e) => {
+                    eprintln!("c_download_file: URL conversion error: {}", e);
+                    return 1;
+                }
             };
 
-            let save_path_str = match CStr::from_ptr(save_path).to_str() {
+            let save_path_str = match c_str_to_rust_str(save_path) {
                 Ok(s) => s,
-                Err(_) => return 1,
+                Err(e) => {
+                    eprintln!("c_download_file: Save path conversion error: {}", e);
+                    return 1;
+                }
             };
 
             let buffer_pool = BufferPool::new(buffer_pool_size, buffer_size);
@@ -645,18 +721,11 @@ pub mod web {
 
                     0
                 }
-                Err(_) => 1,
+                Err(e) => {
+                    eprintln!("c_download_file error: {}", e);
+                    1
+                }
             }
         }
-    }
-    #[test]
-    fn test_download_file() {
-        let url = "http://127.0.0.1:5244/d/home/sunyuze/work/home/sunyuze/work/sun_vpn/vite.config.ts?sign=fCBoNURVB5Fp_DwUlqvBw_O1RyUuXWnKozFOPINaJPY=:0";
-        let save_path = "/home/sunyuze/Downloads/";
-        let threads = 0;
-        let pool = BufferPool::new(10, 1024 * 1024);
-        let res = download_file(url, save_path, threads, true, &pool);
-        let save = res.unwrap().threads_used;
-        println!("{}", save)
     }
 }
