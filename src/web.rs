@@ -17,7 +17,6 @@ pub mod web {
     use std::fmt;
     use std::fs::{OpenOptions, metadata, rename};
     use std::io::Read;
-    use std::os::unix::fs::MetadataExt;
     use std::path::Path;
     use std::ptr;
     use std::time::Duration;
@@ -117,7 +116,39 @@ pub mod web {
         }
     }
 
-    // HTTP POST请求函数
+    /// 向指定的 URL 发送 HTTP POST 请求，并根据参数选择请求类型（JSON 或表单）和响应内容的处理方式。
+    ///
+    /// # 泛型参数
+    ///
+    /// - `T`: 实现了 `reqwest::IntoUrl` trait 的类型，表示可以转换为 URL 的输入类型。
+    /// - `B`: 实现了 `serde::Serialize` trait 的类型，表示可以被序列化为 JSON 或表单数据的请求体。
+    ///
+    /// # 参数
+    ///
+    /// - `url`: 要发送请求的目标 URL。
+    /// - `body`: 请求体内容，将根据 `way` 参数决定是 JSON 还是表单格式发送。
+    /// - `way`: 布尔值，用于控制请求方式：
+    ///   - `true`: 以 JSON 格式发送请求体。
+    ///   - `false`: 以表单格式发送请求体。
+    /// - `raw_bytes`: 布尔值，用于控制响应体的解析方式：
+    ///   - `true`: 直接返回原始字节流。
+    ///   - `false`: 根据 `Content-Type` 判断是否为文本或 JSON 类型，尝试解析为字符串；否则返回字节流。
+    ///
+    /// # 返回值
+    ///
+    /// 返回一个 `Result<ResPost, WebError>` 类型：
+    /// - 成功时包含 `ResPost` 结构体，包含 HTTP 状态码和响应体内容。
+    /// - 失败时返回 `WebError`，表示请求过程中发生的错误。
+    ///
+    /// # 功能描述
+    ///
+    /// 1. 根据 `way` 参数决定使用 JSON 或表单格式发送 POST 请求。
+    /// 2. 获取响应状态码和 `Content-Type` 头信息。
+    /// 3. 根据 `raw_bytes` 和 `Content-Type` 决定如何处理响应体：
+    ///    - 如果 `raw_bytes` 为 `true`，直接返回原始字节流。
+    ///    - 如果 `Content-Type` 包含 `text/` 或 `json`，尝试解析为文本。
+    ///    - 否则，返回字节流。
+    /// 4. 构造并返回 `ResPost` 结果对象。
     pub fn web_post<T, B>(url: T, body: B, way: bool, raw_bytes: bool) -> Result<ResPost, WebError>
     where
         T: reqwest::IntoUrl,
@@ -304,16 +335,6 @@ pub mod web {
         ))
     }
 
-    // 检查磁盘空间是否足够的函数
-    fn check_disk_space(path: &Path, required_space: u64) -> Result<(), WebError> {
-        let metadata = metadata(path)?;
-        let free_space = metadata.blocks() * metadata.blksize();
-        if free_space < required_space {
-            return Err(WebError::Server("Insufficient disk space".into()));
-        }
-        Ok(())
-    }
-
     /// 下载文件的核心逻辑函数，支持单线程和多线程下载。
     ///
     /// # 参数
@@ -368,9 +389,6 @@ pub mod web {
             .and_then(|ct| ct.to_str().ok())
             .and_then(|ct| ct.parse().ok())
             .ok_or(WebError::Server("Missing Content-Length".into()))?;
-
-        // 检查磁盘空间
-        check_disk_space(original_path.parent().unwrap_or(Path::new("/")), total_size)?;
 
         // 创建临时文件并设置文件大小
         let file = OpenOptions::new()
@@ -463,6 +481,16 @@ pub mod web {
 
     // 缓冲区池的方法实现
     impl BufferPool {
+        /// 创建一个新的BufferPool实例。
+        ///
+        /// # 参数
+        ///
+        /// - `pool_size`: 缓冲池中缓冲区的数量。决定缓冲池可以同时处理的缓冲区数量。
+        /// - `buffer_size`: 每个缓冲区的大小。所有缓冲区都将被初始化为这个大小。
+        ///
+        /// # 返回值
+        ///
+        /// 返回一个初始化的BufferPool实例，该实例包含指定数量和大小的缓冲区。
         pub fn new(pool_size: usize, buffer_size: usize) -> Self {
             BufferPool {
                 pool: ArrayQueue::new(pool_size),
@@ -470,17 +498,49 @@ pub mod web {
             }
         }
 
-        pub fn get(&self) -> Result<Vec<u8>, WebError> {
-            if let Some(buf) = self.pool.pop() {
-                Ok(buf)
-            } else {
-                Ok(vec![0; self.buffer_size])
-            }
-        }
+        /// 从缓冲池中获取一个缓冲区
+///
+/// 该方法尝试从缓冲池中弹出一个缓冲区如果缓冲池为空，则创建一个新的缓冲区
+/// 主要用途是在需要处理数据流时，减少缓冲区的创建和销毁，从而提高性能
+///
+/// # Returns
+/// - `Result<Vec<u8>, WebError>`: 返回一个结果类型，包含一个字节向量（缓冲区），
+///   如果操作成功，或者一个`WebError`类型的错误如果操作失败
+///
+/// # Remarks
+/// - 该方法不会失败当前实现中，它总是返回Ok结果，要么包含从池中弹出的缓冲区，
+///   要么包含新创建的缓冲区
+pub fn get(&self) -> Result<Vec<u8>, WebError> {
+    // 尝试从池中弹出一个缓冲区如果成功，返回该缓冲区
+    if let Some(buf) = self.pool.pop() {
+        Ok(buf)
+    } else {
+        // 如果池为空，创建一个新的缓冲区，并返回
+        Ok(vec![0; self.buffer_size])
+    }
+}
 
+
+        /// 将缓冲区放入池中
+        ///
+        /// 此函数从当前实例的缓冲区池中获取一个缓冲区，清空其内容并调整其大小，
+        /// 然后尝试将其放回池中以供将来使用。如果池已满，此操作将失败。
+        ///
+        /// # 参数
+        ///
+        /// * `mut buf: Vec<u8>` - 一个可变的字节向量，代表要放入池中的缓冲区。
+        ///   函数将清除这个缓冲区的内容并调整其大小，以匹配实例的缓冲区大小。
+        ///
+        /// # 返回
+        ///
+        /// * `Ok(())` - 如果缓冲区成功放入池中。
+        /// * `Err(WebError::BufferPoolFull)` - 如果池已满，无法放入缓冲区。
         pub fn put(&self, mut buf: Vec<u8>) -> Result<(), WebError> {
+            // 清空缓冲区内容，准备重新使用
             buf.clear();
+            // 调整缓冲区大小，以匹配实例的缓冲区大小设置
             buf.resize(self.buffer_size, 0);
+            // 尝试将缓冲区放回池中，如果池已满，则返回错误
             self.pool.push(buf).map_err(|_| WebError::BufferPoolFull)
         }
     }
@@ -727,5 +787,14 @@ pub mod web {
                 }
             }
         }
+    }
+    #[test]
+    fn test_download_file() {
+        let url = "http://localhost:1145/post/read";
+        let mut data = HashMap::new();
+        data.insert("path", "httpsjkhgj");
+        let res = web_post(url, data, false, false).unwrap();
+        println!("status code: {}", res.status_code);
+        println!("body: {}", res.body)
     }
 }
