@@ -24,7 +24,21 @@ memmap2 = "0.9.5"
 percent-encoding = "2.3.1"
 
 [build-dependencies]
-cbindgen = "0.28.0"
+cbindgen = "0.29.0"
+
+[profile.dev]
+opt-level = 0  # 不优化，加快编译速度
+debug = true   # 包含调试信息
 
 
+# 发布环境配置
+[profile.release]
+opt-level = 3  # 最高优化级别
+debug = false  # 不包含调试信息
+
+# 启用 clippy 检查（可选但推荐）
+[package.metadata.clippy]
+# 所有 clippy lints 视为警告
+# 可改为 deny = ["all"] 使所有 lints 成为错误
+warn = ["all"]
 

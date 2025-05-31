@@ -10,7 +10,7 @@ pub mod web {
     use rayon::prelude::*;
     use reqwest::Url;
     use reqwest::blocking::Client;
-    use reqwest::header::{ACCEPT_RANGES, CONTENT_LENGTH, CONTENT_TYPE};
+    use reqwest::header::{ACCEPT_RANGES, CONTENT_LENGTH, CONTENT_TYPE, HeaderMap};
     use serde::Serialize;
     use std::collections::HashMap;
     use std::ffi::{CStr, CString, c_char};
@@ -160,6 +160,55 @@ pub mod web {
             GLOBAL_CLIENT.post(url).form(&body).send()?
         };
 
+        let status_code = response.status().as_u16() as i32;
+        let content_type = response
+            .headers()
+            .get(CONTENT_TYPE)
+            .and_then(|ct| ct.to_str().ok())
+            .unwrap_or("");
+
+        let res_body = if raw_bytes {
+            ResponseBody::Bytes(response.bytes()?.to_vec())
+        } else {
+            match content_type {
+                t if t.contains("text/") || t.contains("json") => {
+                    ResponseBody::Text(response.text()?)
+                }
+                _ => ResponseBody::Bytes(response.bytes()?.to_vec()),
+            }
+        };
+
+        Ok(ResPost::new(status_code, res_body))
+    }
+
+    pub fn web_post_headers<T, B>(
+        url: T,
+        headers: HeaderMap,
+        body: B,
+        way: bool,
+        raw_bytes: bool, // 新增请求头参数
+    ) -> Result<ResPost, WebError>
+    where
+        T: reqwest::IntoUrl,
+        B: Serialize,
+    {
+        let mut request_builder = if way {
+            GLOBAL_CLIENT.post(url).json(&body)
+        } else {
+            GLOBAL_CLIENT.post(url).form(&body)
+        };
+
+        // 添加所有请求头
+        for (name, value) in headers {
+            // 跳过可能导致错误的无效头
+            if let Some(name) = name {
+                request_builder = request_builder.header(name, value);
+            }
+        }
+
+        let response = request_builder.send()?;
+
+        // 处理响应
         let status_code = response.status().as_u16() as i32;
         let content_type = response
             .headers()
@@ -499,27 +548,26 @@ pub mod web {
         }
 
         /// 从缓冲池中获取一个缓冲区
-///
-/// 该方法尝试从缓冲池中弹出一个缓冲区如果缓冲池为空，则创建一个新的缓冲区
-/// 主要用途是在需要处理数据流时，减少缓冲区的创建和销毁，从而提高性能
-///
-/// # Returns
-/// - `Result<Vec<u8>, WebError>`: 返回一个结果类型，包含一个字节向量（缓冲区），
-///   如果操作成功，或者一个`WebError`类型的错误如果操作失败
-///
-/// # Remarks
-/// - 该方法不会失败当前实现中，它总是返回Ok结果，要么包含从池中弹出的缓冲区，
-///   要么包含新创建的缓冲区
-pub fn get(&self) -> Result<Vec<u8>, WebError> {
-    // 尝试从池中弹出一个缓冲区如果成功，返回该缓冲区
-    if let Some(buf) = self.pool.pop() {
-        Ok(buf)
-    } else {
-        // 如果池为空，创建一个新的缓冲区，并返回
-        Ok(vec![0; self.buffer_size])
-    }
-}
-
+        ///
+        /// 该方法尝试从缓冲池中弹出一个缓冲区如果缓冲池为空，则创建一个新的缓冲区
+        /// 主要用途是在需要处理数据流时，减少缓冲区的创建和销毁，从而提高性能
+        ///
+        /// # Returns
+        /// - `Result<Vec<u8>, WebError>`: 返回一个结果类型，包含一个字节向量（缓冲区），
+        ///   如果操作成功，或者一个`WebError`类型的错误如果操作失败
+        ///
+        /// # Remarks
+        /// - 该方法不会失败当前实现中，它总是返回Ok结果，要么包含从池中弹出的缓冲区，
+        ///   要么包含新创建的缓冲区
+        pub fn get(&self) -> Result<Vec<u8>, WebError> {
+            // 尝试从池中弹出一个缓冲区如果成功，返回该缓冲区
+            if let Some(buf) = self.pool.pop() {
+                Ok(buf)
+            } else {
+                // 如果池为空，创建一个新的缓冲区，并返回
+                Ok(vec![0; self.buffer_size])
+            }
+        }
 
         /// 将缓冲区放入池中
         ///
