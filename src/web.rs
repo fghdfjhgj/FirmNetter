@@ -838,9 +838,9 @@ pub mod web {
     }
     #[test]
     fn test_download_file() {
-        let url = "http://localhost:1145/post/read";
+        let url = "http://api.1wxyun.com/?type=1";
         let mut data = HashMap::new();
-        data.insert("path", "httpsjkhgj");
+        data.insert("Softid", "5T7T5V3G4W1B9Z8Y");
         let res = web_post(url, data, false, false).unwrap();
         println!("status code: {}", res.status_code);
         println!("body: {}", res.body)
