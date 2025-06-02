@@ -150,7 +150,7 @@ pub mod utils {
     ///
     /// # 参数
     ///
-    /// * [output](file:///home/sunyuze/work/firm_netter/target/debug/build/anyhow-d90c9a16818b8895/output) - 一个字节切片，代表待解码的数据。
+    /// * [output] - 一个字节切片，代表待解码的数据。
     ///
     /// # 返回值
     ///
