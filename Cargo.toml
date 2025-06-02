@@ -24,6 +24,12 @@ memmap2 = "0.9.5"
 percent-encoding = "2.3.1"
 ring = "0.17.14"
 thiserror = "2.0.12"
+sha2 = "0.11.0-rc.0"
+hex = "0.4.3"
+
+
+[target.'cfg(windows)'.dependencies]
+winreg = "0.55"
 
 
 [build-dependencies]
@@ -44,4 +50,6 @@ debug = false  # 不包含调试信息
 # 所有 clippy lints 视为警告
 # 可改为 deny = ["all"] 使所有 lints 成为错误
 warn = ["all"]
+denv = ["all"]
+
 
