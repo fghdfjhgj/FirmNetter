@@ -1,179 +1,374 @@
 pub mod safe {
-    use ring::{
-        aead,
-        aead::{Aad, LessSafeKey, Nonce, UnboundKey},
-        rand::{SecureRandom, SystemRandom},
+    use openssl::{
+        error::ErrorStack,
+        rand,
+        symm::{Cipher, Crypter, Mode},
     };
     use thiserror::Error;
+    use base64::{Engine as _, engine::general_purpose};
 
     // 常量定义
-    const AES_128_KEY_LEN: usize = 16;
-    const AES_256_KEY_LEN: usize = 32;
-    const NONCE_LEN: usize = 12;
+    pub const AES_128_KEY_LEN: usize = 16;
+    pub const AES_192_KEY_LEN: usize = 24;
+    pub const AES_256_KEY_LEN: usize = 32;
+    pub const DEFAULT_NONCE_LEN: usize = 12; // GCM推荐的IV长度（12字节）
+    pub const DEFAULT_TAG_LEN: usize = 16;   // GCM认证标签固定长度（16字节）
+    pub const AES_BLOCK_SIZE: usize = 16;    // AES块大小（16字节）
 
+    // 错误定义
     #[derive(Debug, Error)]
     pub enum KeyError {
         #[error("随机密钥生成失败")]
         RandomFailed,
-        #[error("密钥长度无效: 必须为 {AES_128_KEY_LEN} 或 {AES_256_KEY_LEN} 字节")]
+        #[error("密钥长度无效: 必须为 {AES_128_KEY_LEN}, {AES_192_KEY_LEN} 或 {AES_256_KEY_LEN} 字节")]
         InvalidKeyLength,
-    }
-
-    /// 生成指定长度的加密密钥。
-    ///
-    /// 此函数旨在为AES加密算法生成安全的随机密钥。它只支持生成特定长度的密钥，
-    /// 即AES_128_KEY_LEN或AES_256_KEY_LEN，以确保加密的安全性。
-    ///
-    /// # 参数
-    /// - `N`: 一个编译时常量，指定所需密钥的长度（以字节为单位）。
-    ///
-    /// # 返回值
-    /// - `Result<[u8; N], KeyError>`: 如果密钥成功生成，返回一个长度为N的字节数组；
-    ///   如果生成密钥过程中遇到错误（如不支持的密钥长度或随机数生成失败），则返回相应的错误。
-    ///
-    /// # 错误处理
-    /// - 如果指定的密钥长度N不是AES支持的长度，将返回`KeyError::InvalidKeyLength`错误。
-    /// - 如果系统随机数生成器失败，将返回`KeyError::RandomFailed`错误。
-    pub fn generate_key<const N: usize>() -> Result<[u8; N], KeyError> {
-        // 检查密钥长度是否为支持的AES密钥长度
-        if N != AES_128_KEY_LEN && N != AES_256_KEY_LEN {
-            return Err(KeyError::InvalidKeyLength);
-        }
-
-        // 初始化密钥数组
-        let mut key = [0u8; N];
-        // 使用系统随机数生成器填充密钥数组
-        SystemRandom::new()
-            .fill(&mut key)
-            .map_err(|_| KeyError::RandomFailed)?;
-        // 返回生成的密钥
-        Ok(key)
     }
 
     #[derive(Debug, Error)]
     pub enum CryptoError {
-        #[error("加密失败")]
-        EncryptionFailed,
-        #[error("解密失败")]
-        DecryptionFailed,
-        #[error("不支持的密钥长度: 需要 {expected} 字节，实际提供 {actual} 字节")]
-        UnsupportedKeyLength { expected: usize, actual: usize },
-        #[error("密文长度无效")]
-        InvalidCiphertextLength,
+        #[error("加密失败: {0}")]
+        EncryptionFailed(String),
+        #[error("解密失败: {0}")]
+        DecryptionFailed(String),
+        #[error("不支持的密钥长度: 需要 {AES_128_KEY_LEN}, {AES_192_KEY_LEN} 或 {AES_256_KEY_LEN} 字节，实际 {actual} 字节")]
+        UnsupportedKeyLength { actual: usize },
+        #[error("密文长度无效: 最小长度应为 {min_length} 字节，实际为 {actual} 字节")]
+        InvalidCiphertextLength { min_length: usize, actual: usize },
+        #[error("认证标签验证失败")]
+        TagVerificationFailed,
+        #[error("IV/Nonce长度无效")]
+        InvalidNonceLength,
+        #[error("认证标签长度无效")]
+        InvalidTagLength,
+        #[error("Base64编码失败: {0}")]
+        Base64EncodeError(String),
+        #[error("Base64解码失败: {0}")]
+        Base64DecodeError(String),
+        #[error("密文格式错误")]
+        InvalidCiphertextFormat,
+        #[error("UTF-8解码失败: {0}")]
+        Utf8DecodingFailed(String),
     }
 
-    /// 根据密钥长度选择合适的加密算法
-    ///
-    /// # 参数
-    ///
-    /// * `key` - 一个字节切片，代表加密密钥
-    ///
-    /// # 返回值
-    ///
-    /// * `Ok(&'static aead::Algorithm)` - 如果密钥长度匹配支持的算法，返回该算法的静态引用
-    /// * `Err(CryptoError)` - 如果密钥长度不支持，则返回一个CryptoError错误
-    ///
-    /// # 描述
-    ///
-    /// 该函数根据提供的密钥长度来选择合适的加密算法（目前支持AES-128-GCM和AES-256-GCM）。
-    /// 如果密钥长度不匹配任何支持的算法，将返回一个UnsupportedKeyLength错误。
-    fn select_algorithm(key: &[u8]) -> Result<&'static aead::Algorithm, CryptoError> {
-        match key.len() {
-            AES_128_KEY_LEN => Ok(&aead::AES_128_GCM),
-            AES_256_KEY_LEN => Ok(&aead::AES_256_GCM),
-            len => Err(CryptoError::UnsupportedKeyLength {
-                expected: AES_256_KEY_LEN,
-                actual: len,
-            }),
+    impl From<ErrorStack> for CryptoError {
+        fn from(err: ErrorStack) -> Self {
+            CryptoError::EncryptionFailed(err.to_string())
         }
     }
 
-    /// 使用给定的密钥对明文进行加密。
-    ///
-    /// # 参数
-    ///
-    /// - `key`: 用于加密的密钥。
-    /// - `plaintext`: 需要加密的明文数据。
-    ///
-    /// # 返回
-    ///
-    /// - `Ok(Vec<u8>)`: 加密后的数据，包括nonce、密文和标签。
-    /// - `Err(CryptoError)`: 如果加密过程中发生错误，则返回相应的错误。
-    pub fn encrypt(key: &[u8], plaintext: &[u8]) -> Result<Vec<u8>, CryptoError> {
-        let algorithm = select_algorithm(key)?;
-        let mut nonce_bytes = [0u8; NONCE_LEN];
-        SystemRandom::new()
-            .fill(&mut nonce_bytes)
-            .map_err(|_| CryptoError::EncryptionFailed)?;
+    // 密钥生成
+    /// 生成指定长度的加密密钥
+    pub fn generate_key<const N: usize>() -> Result<[u8; N], KeyError> {
+        if N != AES_128_KEY_LEN && N != AES_192_KEY_LEN && N != AES_256_KEY_LEN {
+            return Err(KeyError::InvalidKeyLength);
+        }
 
-        let unbound_key =
-            UnboundKey::new(algorithm, key).map_err(|_| CryptoError::EncryptionFailed)?;
-        let less_safe_key = LessSafeKey::new(unbound_key);
+        let mut key = [0u8; N];
+        rand::rand_bytes(&mut key).map_err(|_| KeyError::RandomFailed)?;
+        Ok(key)
+    }
 
-        let mut buffer = plaintext.to_vec();
-        let tag = less_safe_key
-            .seal_in_place_separate_tag(
-                // 这里返回的是标签(tag)
-                Nonce::assume_unique_for_key(nonce_bytes),
-                Aad::empty(),
-                &mut buffer,
-            )
-            .map_err(|_| CryptoError::EncryptionFailed)?;
+    /// 生成Base64编码的密钥
+    pub fn generate_key_base64<const N: usize>() -> Result<String, KeyError> {
+        let key = generate_key::<N>()?;
+        Ok(base64_encode(&key))
+    }
 
-        // 正确结构：nonce(12) + 密文 + tag(16)
-        let mut result = nonce_bytes.to_vec();
-        result.extend(buffer); // 密文
-        result.extend(tag.as_ref()); // 添加标签
+    // Base64编解码
+    /// Base64编码
+    pub fn base64_encode(data: &[u8]) -> String {
+        general_purpose::STANDARD.encode(data)
+    }
+
+    /// Base64解码
+    pub fn base64_decode(data: &str) -> Result<Vec<u8>, CryptoError> {
+        general_purpose::STANDARD
+            .decode(data)
+            .map_err(|e| CryptoError::Base64DecodeError(e.to_string()))
+    }
+
+    // AES-GCM 模式（原有代码）
+    /// 根据密钥长度选择合适的加密算法（GCM模式）
+    fn select_cipher(key: &[u8]) -> Result<Cipher, CryptoError> {
+        match key.len() {
+            AES_128_KEY_LEN => Ok(Cipher::aes_128_gcm()),
+            AES_192_KEY_LEN => Ok(Cipher::aes_192_gcm()),
+            AES_256_KEY_LEN => Ok(Cipher::aes_256_gcm()),
+            len => Err(CryptoError::UnsupportedKeyLength { actual: len }),
+        }
+    }
+
+    /// 加密选项配置（GCM模式）
+    #[derive(Debug, Clone)]
+    pub struct EncryptionOptions {
+        pub nonce_length: usize,
+        pub tag_length: usize,
+    }
+
+    impl Default for EncryptionOptions {
+        fn default() -> Self {
+            Self {
+                nonce_length: DEFAULT_NONCE_LEN,
+                tag_length: DEFAULT_TAG_LEN,
+            }
+        }
+    }
+
+    /// 使用GCM模式加密
+    /// 使用GCM模式加密
+    pub fn encrypt_with_options(
+        key: &[u8],
+        plaintext: &[u8],
+        options: &EncryptionOptions,
+    ) -> Result<Vec<u8>, CryptoError> {
+        if options.nonce_length == 0 || options.tag_length == 0 {
+            return Err(CryptoError::InvalidNonceLength);
+        }
+
+        let cipher = select_cipher(key)?;
+        let mut iv = vec![0u8; options.nonce_length];
+        // 修正此处的 map_err 调用
+        rand::rand_bytes(&mut iv)
+            .map_err(|err: ErrorStack| CryptoError::EncryptionFailed(err.to_string()))?;
+
+        let mut encrypter = Crypter::new(cipher, Mode::Encrypt, key, Some(&iv))?;
+        encrypter.pad(false);
+
+        let mut ciphertext = Vec::new();
+        encrypter.update(plaintext, &mut ciphertext)?;
+        encrypter.finalize(&mut ciphertext)?;
+
+        let mut tag = vec![0u8; options.tag_length];
+        encrypter.get_tag(&mut tag)?;
+
+        let mut result = Vec::new();
+        result.extend(&iv);
+        result.extend(&ciphertext);
+        result.extend(&tag);
+
         Ok(result)
     }
 
-    /// 解密给定的密文。
-    ///
-    /// # 参数
-    ///
-    /// - `key`: 解密密文的密钥。
-    /// - `ciphertext`: 要解密的密文。
-    ///
-    /// # 返回
-    ///
-    /// - `Ok(Vec<u8>)`: 解密后的数据。
-    /// - `Err(CryptoError)`: 如果解密失败，则返回错误。
-    pub fn decrypt(key: &[u8], ciphertext: &[u8]) -> Result<Vec<u8>, CryptoError> {
-        let algorithm = select_algorithm(key)?;
-        let tag_len = algorithm.tag_len();
+    /// 使用默认选项加密（GCM模式）
+    pub fn encrypt(key: &[u8], plaintext: &[u8]) -> Result<Vec<u8>, CryptoError> {
+        encrypt_with_options(key, plaintext, &EncryptionOptions::default())
+    }
 
-        if ciphertext.len() < NONCE_LEN + tag_len {
-            return Err(CryptoError::InvalidCiphertextLength);
+    /// 加密并返回Base64编码结果（GCM模式）
+    pub fn encrypt_to_base64(key: &[u8], plaintext: &[u8]) -> Result<String, CryptoError> {
+        let ciphertext = encrypt(key, plaintext)?;
+        Ok(base64_encode(&ciphertext))
+    }
+
+    /// 解密选项配置（GCM模式）
+    #[derive(Debug, Clone)]
+    pub struct DecryptionOptions {
+        pub nonce_length: usize,
+        pub tag_length: usize,
+    }
+
+    impl Default for DecryptionOptions {
+        fn default() -> Self {
+            Self {
+                nonce_length: DEFAULT_NONCE_LEN,
+                tag_length: DEFAULT_TAG_LEN,
+            }
+        }
+    }
+
+    /// 使用GCM模式解密
+    pub fn decrypt_with_options(
+        key: &[u8],
+        ciphertext: &[u8],
+        options: &DecryptionOptions,
+    ) -> Result<Vec<u8>, CryptoError> {
+        if options.nonce_length == 0 || options.tag_length == 0 {
+            return Err(CryptoError::InvalidNonceLength);
         }
 
-        let nonce = Nonce::try_assume_unique_for_key(&ciphertext[..NONCE_LEN])
-            .map_err(|_| CryptoError::DecryptionFailed)?;
+        let cipher = select_cipher(key)?;
+        let min_length = options.nonce_length + options.tag_length;
+        if ciphertext.len() < min_length {
+            return Err(CryptoError::InvalidCiphertextLength {
+                min_length,
+                actual: ciphertext.len(),
+            });
+        }
 
-        let unbound_key =
-            UnboundKey::new(algorithm, key).map_err(|_| CryptoError::DecryptionFailed)?;
-        let less_safe_key = LessSafeKey::new(unbound_key);
+        let (iv, rest) = ciphertext.split_at(options.nonce_length);
+        let (cipher_data, tag) = rest.split_at(rest.len() - options.tag_length);
 
-        // 创建包含密文+标签的缓冲区
-        let mut buffer = ciphertext[NONCE_LEN..].to_vec();
+        let mut decrypter = Crypter::new(cipher, Mode::Decrypt, key, Some(iv))?;
+        decrypter.pad(false);
+        decrypter.set_tag(tag)?;
 
-        // 解密并获取明文长度
-        let plaintext_len = less_safe_key
-            .open_in_place(nonce, Aad::empty(), &mut buffer)
-            .map_err(|_| CryptoError::DecryptionFailed)?
-            .len();
+        let mut plaintext = Vec::new();
+        decrypter.update(cipher_data, &mut plaintext)?;
+        decrypter.finalize(&mut plaintext)?;
 
-        // 只返回实际明文部分
-        Ok(buffer[..plaintext_len].to_vec())
+        Ok(plaintext)
     }
-    #[test]
-    fn test() {
-        let key = generate_key::<32>().expect("generate key failed");
-        println!("key: {:?}", key);
-        let text = "herld";
-        println!("text: {}", text);
-        let ciphertext = encrypt(&key, text.as_ref()).expect("encrypt failed");
-        println!("ciphertext: {:?}", ciphertext);
-        let plaintext = decrypt(&key, &ciphertext).expect("decrypt failed");
-        println!("plaintext: {}", String::from_utf8_lossy(&plaintext));
+
+    /// 使用默认选项解密（GCM模式）
+    pub fn decrypt(key: &[u8], ciphertext: &[u8]) -> Result<Vec<u8>, CryptoError> {
+        decrypt_with_options(key, ciphertext, &DecryptionOptions::default())
+    }
+
+    /// 解密Base64编码的密文（GCM模式）
+    pub fn decrypt_from_base64(key: &[u8], ciphertext_base64: &str) -> Result<Vec<u8>, CryptoError> {
+        let ciphertext = base64_decode(ciphertext_base64)?;
+        decrypt(key, &ciphertext)
+    }
+
+    // AES-CBC-192 模式（新增代码）
+    /// AES-CBC 加密模式
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub enum AesCbcMode {
+        FixedIv,       // 固定IV（全零）
+        RandomIv,      // 随机IV
+    }
+
+    /// 使用AES-CBC-192加密
+    pub fn encrypt_cbc_192(
+        key: &[u8],
+        plaintext: &str,
+        mode: AesCbcMode,
+    ) -> Result<String, CryptoError> {
+        if key.len() != AES_192_KEY_LEN {
+            return Err(CryptoError::UnsupportedKeyLength {
+                actual: key.len(),
+            });
+        }
+
+        let iv = match mode {
+            AesCbcMode::FixedIv => vec![0u8; AES_BLOCK_SIZE],
+            AesCbcMode::RandomIv => {
+                let mut iv = vec![0u8; AES_BLOCK_SIZE];
+                rand::rand_bytes(&mut iv).map_err(|e| {
+                    CryptoError::EncryptionFailed(format!("生成随机IV失败: {}", e))
+                })?;
+                iv
+            }
+        };
+
+        let cipher = Cipher::aes_192_cbc();
+        let mut encrypter = Crypter::new(cipher, Mode::Encrypt, key, Some(&iv))?;
+        encrypter.pad(true); // 启用PKCS#7填充
+
+        let mut ciphertext = Vec::new();
+        encrypter.update(plaintext.as_bytes(), &mut ciphertext)?;
+        encrypter.finalize(&mut ciphertext)?;
+
+        match mode {
+            AesCbcMode::FixedIv => Ok(base64_encode(&ciphertext)),
+            AesCbcMode::RandomIv => {
+                let iv_b64 = base64_encode(&iv);
+                let ciphertext_b64 = base64_encode(&ciphertext);
+                Ok(format!("R|{}|{}", iv_b64, ciphertext_b64))
+            }
+        }
+    }
+
+    /// 使用AES-CBC-192解密
+    pub fn decrypt_cbc_192(
+        key: &[u8],
+        ciphertext_base64: &str,
+    ) -> Result<String, CryptoError> {
+        if key.len() != AES_192_KEY_LEN {
+            return Err(CryptoError::UnsupportedKeyLength {
+                actual: key.len(),
+            });
+        }
+
+        if ciphertext_base64.starts_with("R|") {
+            let parts: Vec<&str> = ciphertext_base64.splitn(3, '|').collect();
+            if parts.len() != 3 {
+                return Err(CryptoError::InvalidCiphertextFormat);
+            }
+
+            let iv_b64 = parts[1];
+            let ciphertext_b64 = parts[2];
+            let iv = base64_decode(iv_b64)?;
+            let ciphertext = base64_decode(ciphertext_b64)?;
+
+            if iv.len() != AES_BLOCK_SIZE {
+                return Err(CryptoError::InvalidNonceLength);
+            }
+
+            let cipher = Cipher::aes_192_cbc();
+            let mut decrypter = Crypter::new(cipher, Mode::Decrypt, key, Some(&iv))?;
+            decrypter.pad(true);
+
+            let mut plaintext = Vec::new();
+            decrypter.update(&ciphertext, &mut plaintext)?;
+            decrypter.finalize(&mut plaintext)?;
+
+            String::from_utf8(plaintext).map_err(|e| {
+                CryptoError::Utf8DecodingFailed(e.to_string())
+            })
+        } else {
+            let ciphertext = base64_decode(ciphertext_base64)?;
+            let iv = [0u8; AES_BLOCK_SIZE];
+
+            let cipher = Cipher::aes_192_cbc();
+            let mut decrypter = Crypter::new(cipher, Mode::Decrypt, key, Some(&iv))?;
+            decrypter.pad(true);
+
+            let mut plaintext = Vec::new();
+            decrypter.update(&ciphertext, &mut plaintext)?;
+            decrypter.finalize(&mut plaintext)?;
+
+            String::from_utf8(plaintext).map_err(|e| {
+                CryptoError::Utf8DecodingFailed(e.to_string())
+            })
+        }
+    }
+
+    // 测试代码
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        // GCM模式测试
+        #[test]
+        fn test_gcm_encryption_decryption() {
+            let key = generate_key::<AES_256_KEY_LEN>().unwrap();
+            let plaintext = b"Hello, GCM!";
+
+            let ciphertext = encrypt(&key, plaintext).unwrap();
+            let decrypted = decrypt(&key, &ciphertext).unwrap();
+            assert_eq!(plaintext, decrypted.as_slice());
+        }
+
+        // CBC-192 固定IV测试
+        #[test]
+        fn test_cbc_192_fixed_iv() {
+            let key = generate_key::<AES_192_KEY_LEN>().unwrap();
+            let plaintext = "Fixed IV Test";
+
+            let ciphertext = encrypt_cbc_192(&key, plaintext, AesCbcMode::FixedIv).unwrap();
+            let decrypted = decrypt_cbc_192(&key, &ciphertext).unwrap();
+            assert_eq!(plaintext, decrypted);
+        }
+
+        // CBC-192 随机IV测试
+        #[test]
+        fn test_cbc_192_random_iv() {
+            let key = generate_key::<AES_192_KEY_LEN>().unwrap();
+            let plaintext = "Random IV Test";
+
+            let ciphertext = encrypt_cbc_192(&key, plaintext, AesCbcMode::RandomIv).unwrap();
+            let decrypted = decrypt_cbc_192(&key, &ciphertext).unwrap();
+            assert_eq!(plaintext, decrypted);
+        }
+
+        // 错误处理测试
+        #[test]
+        fn test_invalid_key_length() {
+            let key = "shortkey".as_bytes(); // 10字节
+            let plaintext = "Test";
+
+            assert!(encrypt_cbc_192(key, plaintext, AesCbcMode::FixedIv).is_err());
+        }
     }
 }

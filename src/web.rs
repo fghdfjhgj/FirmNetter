@@ -181,54 +181,76 @@ pub mod web {
         Ok(ResPost::new(status_code, res_body))
     }
 
-    pub fn web_post_headers<T, B>(
-        url: T,
-        headers: HeaderMap,
-        body: B,
-        way: bool,
-        raw_bytes: bool, // 新增请求头参数
-    ) -> Result<ResPost, WebError>
-    where
-        T: reqwest::IntoUrl,
-        B: Serialize,
-    {
-        let mut request_builder = if way {
-            GLOBAL_CLIENT.post(url).json(&body)
-        } else {
-            GLOBAL_CLIENT.post(url).form(&body)
-        };
+    /// 发起POST请求并处理响应
+///
+/// # Parameters
+///
+/// - `url`: 请求的URL
+/// - `headers`: 请求头的映射
+/// - `body`: 请求体的内容，可以是任意可序列化类型
+/// - `way`: 决定请求体格式的标志，`true`表示JSON格式，`false`表示表单格式
+/// - `raw_bytes`: 指示是否以原始字节形式接收响应体的标志
+///
+/// # Returns
+///
+/// 返回一个包含响应结果的`Result`类型，成功时包含`ResPost`类型的数据，失败时包含`WebError`类型的错误信息
+///
+/// # Remarks
+///
+/// 该函数使用全局的HTTP客户端发起POST请求，并根据`way`参数决定请求体的格式。它还允许通过`headers`参数自定义请求头，并根据`raw_bytes`参数决定如何处理响应体。
+pub fn web_post_headers<T, B>(
+    url: T,
+    headers: HeaderMap,
+    body: B,
+    way: bool,
+    raw_bytes: bool, // 新增请求头参数
+) -> Result<ResPost, WebError>
+where
+    T: reqwest::IntoUrl,
+    B: Serialize,
+{
+    // 根据`way`参数决定请求方式，`true`为JSON，`false`为表单
+    let mut request_builder = if way {
+        GLOBAL_CLIENT.post(url).json(&body)
+    } else {
+        GLOBAL_CLIENT.post(url).form(&body)
+    };
 
-        // 添加所有请求头
-        for (name, value) in headers {
-            // 跳过可能导致错误的无效头
-            if let Some(name) = name {
-                request_builder = request_builder.header(name, value);
-            }
+    // 添加所有请求头
+    for (name, value) in headers {
+        // 跳过可能导致错误的无效头
+        if let Some(name) = name {
+            request_builder = request_builder.header(name, value);
         }
-
-        let response = request_builder.send()?;
-
-        // 处理响应
-        let status_code = response.status().as_u16() as i32;
-        let content_type = response
-            .headers()
-            .get(CONTENT_TYPE)
-            .and_then(|ct| ct.to_str().ok())
-            .unwrap_or("");
-
-        let res_body = if raw_bytes {
-            ResponseBody::Bytes(response.bytes()?.to_vec())
-        } else {
-            match content_type {
-                t if t.contains("text/") || t.contains("json") => {
-                    ResponseBody::Text(response.text()?)
-                }
-                _ => ResponseBody::Bytes(response.bytes()?.to_vec()),
-            }
-        };
-
-        Ok(ResPost::new(status_code, res_body))
     }
+
+    // 发送请求
+    let response = request_builder.send()?;
+
+    // 处理响应
+    let status_code = response.status().as_u16() as i32;
+    let content_type = response
+        .headers()
+        .get(CONTENT_TYPE)
+        .and_then(|ct| ct.to_str().ok())
+        .unwrap_or("");
+
+    // 根据`raw_bytes`参数决定响应体的处理方式
+    let res_body = if raw_bytes {
+        ResponseBody::Bytes(response.bytes()?.to_vec())
+    } else {
+        match content_type {
+            t if t.contains("text/") || t.contains("json") => {
+                ResponseBody::Text(response.text()?)
+            }
+            _ => ResponseBody::Bytes(response.bytes()?.to_vec()),
+        }
+    };
+
+    // 返回处理后的响应结果
+    Ok(ResPost::new(status_code, res_body))
+}
+
 
     // C接口结构体，用于与C语言交互
     #[repr(C)]
