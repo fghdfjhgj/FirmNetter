@@ -1,7 +1,8 @@
 pub mod utils {
     use encoding_rs::GBK;
-    use std::ffi::{CStr, CString, c_char};
+    use std::ffi::{c_char, CStr, CString};
     use std::io;
+    use std::io::Write;
     use std::os::raw::c_int;
     use std::path::Path;
     use std::process::{Child, Command, Output, Stdio};
@@ -386,5 +387,13 @@ pub mod utils {
         let (encoded, _, _) = GBK.encode(s);
         // 将编码后的字节序列转换为 Vec<u8> 类型并返回
         encoded.into_owned()
+    }
+
+    /// 清空终端屏幕
+    ///
+
+    pub fn clear_terminal() {
+        print!("\x1B[2J\x1B[1;1H");
+        io::stdout().flush().unwrap();
     }
 }

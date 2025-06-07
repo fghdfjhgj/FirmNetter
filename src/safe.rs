@@ -1,26 +1,28 @@
 pub mod safe {
+    use base64::{Engine as _, engine::general_purpose};
     use openssl::{
         error::ErrorStack,
         rand,
         symm::{Cipher, Crypter, Mode},
     };
     use thiserror::Error;
-    use base64::{Engine as _, engine::general_purpose};
 
     // 常量定义
     pub const AES_128_KEY_LEN: usize = 16;
     pub const AES_192_KEY_LEN: usize = 24;
     pub const AES_256_KEY_LEN: usize = 32;
     pub const DEFAULT_NONCE_LEN: usize = 12; // GCM推荐的IV长度（12字节）
-    pub const DEFAULT_TAG_LEN: usize = 16;   // GCM认证标签固定长度（16字节）
-    pub const AES_BLOCK_SIZE: usize = 16;    // AES块大小（16字节）
+    pub const DEFAULT_TAG_LEN: usize = 16; // GCM认证标签固定长度（16字节）
+    pub const AES_BLOCK_SIZE: usize = 16; // AES块大小（16字节）
 
     // 错误定义
     #[derive(Debug, Error)]
     pub enum KeyError {
         #[error("随机密钥生成失败")]
         RandomFailed,
-        #[error("密钥长度无效: 必须为 {AES_128_KEY_LEN}, {AES_192_KEY_LEN} 或 {AES_256_KEY_LEN} 字节")]
+        #[error(
+            "密钥长度无效: 必须为 {AES_128_KEY_LEN}, {AES_192_KEY_LEN} 或 {AES_256_KEY_LEN} 字节"
+        )]
         InvalidKeyLength,
     }
 
@@ -30,7 +32,9 @@ pub mod safe {
         EncryptionFailed(String),
         #[error("解密失败: {0}")]
         DecryptionFailed(String),
-        #[error("不支持的密钥长度: 需要 {AES_128_KEY_LEN}, {AES_192_KEY_LEN} 或 {AES_256_KEY_LEN} 字节，实际 {actual} 字节")]
+        #[error(
+            "不支持的密钥长度: 需要 {AES_128_KEY_LEN}, {AES_192_KEY_LEN} 或 {AES_256_KEY_LEN} 字节，实际 {actual} 字节"
+        )]
         UnsupportedKeyLength { actual: usize },
         #[error("密文长度无效: 最小长度应为 {min_length} 字节，实际为 {actual} 字节")]
         InvalidCiphertextLength { min_length: usize, actual: usize },
@@ -57,25 +61,58 @@ pub mod safe {
     }
 
     // 密钥生成
-    /// 生成指定长度的加密密钥
+    /// 生成指定长度的AES加密密钥。
+    ///
+    /// 此函数根据常量泛型参数N指定的长度生成一个随机的AES加密密钥。
+    /// 它首先检查所需密钥长度是否符合AES加密标准（128、192或256位），
+    /// 如果不符合，则返回一个错误。如果密钥长度有效，则生成相应长度的随机密钥。
+    ///
+    /// # 类型参数
+    /// - `N`: 一个常量 usize 值，指定所需密钥的长度（以字节为单位）。
+    ///
+    /// # 返回值
+    /// - `Ok([u8; N])`: 当密钥成功生成时，返回一个长度为N的字节数组。
+    /// - `Err(KeyError)`: 当密钥长度无效或随机密钥生成失败时，返回一个`KeyError`。
     pub fn generate_key<const N: usize>() -> Result<[u8; N], KeyError> {
+        // 检查密钥长度是否为AES加密标准支持的长度
         if N != AES_128_KEY_LEN && N != AES_192_KEY_LEN && N != AES_256_KEY_LEN {
             return Err(KeyError::InvalidKeyLength);
         }
 
+        // 初始化一个长度为N的字节数组来存储密钥
         let mut key = [0u8; N];
+        // 生成随机密钥，如果生成失败则返回错误
         rand::rand_bytes(&mut key).map_err(|_| KeyError::RandomFailed)?;
+        // 成功生成密钥后，返回Ok
         Ok(key)
     }
 
-    /// 生成Base64编码的密钥
+    /// 生成一个Base64编码的随机密钥
+    ///
+    /// # 泛型参数
+    /// - `N`: 密钥的长度，由调用者指定
+    ///
+    /// # 返回值
+    /// - `Result<String, KeyError>`: 返回一个结果，包含生成的Base64编码密钥字符串或错误信息
+    ///
+    /// # 功能描述
+    /// 本函数旨在生成一个指定长度的随机密钥，并将其Base64编码后返回
+    /// 它首先调用`generate_key`函数生成一个二进制密钥，然后使用`base64_encode`函数将其编码为Base64格式的字符串
+    /// 如果在生成密钥或编码过程中遇到错误，将返回相应的错误信息
     pub fn generate_key_base64<const N: usize>() -> Result<String, KeyError> {
+        // 生成一个长度为N的二进制密钥
         let key = generate_key::<N>()?;
+        // 将二进制密钥Base64编码，并返回编码后的字符串
         Ok(base64_encode(&key))
     }
 
-    // Base64编解码
-    /// Base64编码
+    /// 将字节切片进行Base64编码
+    ///
+    /// # 参数
+    /// * `data`: 待编码的字节切片
+    ///
+    /// # 返回值
+    /// 返回一个Base64编码后的字符串
     pub fn base64_encode(data: &[u8]) -> String {
         general_purpose::STANDARD.encode(data)
     }
@@ -215,7 +252,10 @@ pub mod safe {
     }
 
     /// 解密Base64编码的密文（GCM模式）
-    pub fn decrypt_from_base64(key: &[u8], ciphertext_base64: &str) -> Result<Vec<u8>, CryptoError> {
+    pub fn decrypt_from_base64(
+        key: &[u8],
+        ciphertext_base64: &str,
+    ) -> Result<Vec<u8>, CryptoError> {
         let ciphertext = base64_decode(ciphertext_base64)?;
         decrypt(key, &ciphertext)
     }
@@ -224,8 +264,8 @@ pub mod safe {
     /// AES-CBC 加密模式
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     pub enum AesCbcMode {
-        FixedIv,       // 固定IV（全零）
-        RandomIv,      // 随机IV
+        FixedIv,  // 固定IV（全零）
+        RandomIv, // 随机IV
     }
 
     /// 使用AES-CBC-192加密
@@ -235,18 +275,15 @@ pub mod safe {
         mode: AesCbcMode,
     ) -> Result<String, CryptoError> {
         if key.len() != AES_192_KEY_LEN {
-            return Err(CryptoError::UnsupportedKeyLength {
-                actual: key.len(),
-            });
+            return Err(CryptoError::UnsupportedKeyLength { actual: key.len() });
         }
 
         let iv = match mode {
             AesCbcMode::FixedIv => vec![0u8; AES_BLOCK_SIZE],
             AesCbcMode::RandomIv => {
                 let mut iv = vec![0u8; AES_BLOCK_SIZE];
-                rand::rand_bytes(&mut iv).map_err(|e| {
-                    CryptoError::EncryptionFailed(format!("生成随机IV失败: {}", e))
-                })?;
+                rand::rand_bytes(&mut iv)
+                    .map_err(|e| CryptoError::EncryptionFailed(format!("生成随机IV失败: {}", e)))?;
                 iv
             }
         };
@@ -270,14 +307,9 @@ pub mod safe {
     }
 
     /// 使用AES-CBC-192解密
-    pub fn decrypt_cbc_192(
-        key: &[u8],
-        ciphertext_base64: &str,
-    ) -> Result<String, CryptoError> {
+    pub fn decrypt_cbc_192(key: &[u8], ciphertext_base64: &str) -> Result<String, CryptoError> {
         if key.len() != AES_192_KEY_LEN {
-            return Err(CryptoError::UnsupportedKeyLength {
-                actual: key.len(),
-            });
+            return Err(CryptoError::UnsupportedKeyLength { actual: key.len() });
         }
 
         if ciphertext_base64.starts_with("R|") {
@@ -303,9 +335,7 @@ pub mod safe {
             decrypter.update(&ciphertext, &mut plaintext)?;
             decrypter.finalize(&mut plaintext)?;
 
-            String::from_utf8(plaintext).map_err(|e| {
-                CryptoError::Utf8DecodingFailed(e.to_string())
-            })
+            String::from_utf8(plaintext).map_err(|e| CryptoError::Utf8DecodingFailed(e.to_string()))
         } else {
             let ciphertext = base64_decode(ciphertext_base64)?;
             let iv = [0u8; AES_BLOCK_SIZE];
@@ -318,9 +348,7 @@ pub mod safe {
             decrypter.update(&ciphertext, &mut plaintext)?;
             decrypter.finalize(&mut plaintext)?;
 
-            String::from_utf8(plaintext).map_err(|e| {
-                CryptoError::Utf8DecodingFailed(e.to_string())
-            })
+            String::from_utf8(plaintext).map_err(|e| CryptoError::Utf8DecodingFailed(e.to_string()))
         }
     }
 

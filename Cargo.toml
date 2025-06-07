@@ -29,7 +29,6 @@ regex = "1.11.1"
 openssl = "0.10.73"
 base64 = "0.22.1"
 
-
 [target.'cfg(windows)'.dependencies]
 winreg = "0.55"
 
