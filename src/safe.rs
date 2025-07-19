@@ -1,13 +1,14 @@
 pub mod safe {
-    use base64::{Engine as _, engine::general_purpose};
+    use base64::{engine::general_purpose, Engine as _};
     use openssl::{
         error::ErrorStack,
         rand,
         symm::{Cipher, Crypter, Mode},
     };
+    use std::ffi::{c_char, CStr, CString};
     use thiserror::Error;
 
-    // 常量定义
+    // 常量定义（保持不变）
     pub const AES_128_KEY_LEN: usize = 16;
     pub const AES_192_KEY_LEN: usize = 24;
     pub const AES_256_KEY_LEN: usize = 32;
@@ -15,7 +16,7 @@ pub mod safe {
     pub const DEFAULT_TAG_LEN: usize = 16; // GCM认证标签固定长度（16字节）
     pub const AES_BLOCK_SIZE: usize = 16; // AES块大小（16字节）
 
-    // 错误定义
+    // 错误定义（保持不变）
     #[derive(Debug, Error)]
     pub enum KeyError {
         #[error("随机密钥生成失败")]
@@ -60,72 +61,70 @@ pub mod safe {
         }
     }
 
-    // 密钥生成
-    /// 生成指定长度的AES加密密钥。
-    ///
-    /// 此函数根据常量泛型参数N指定的长度生成一个随机的AES加密密钥。
-    /// 它首先检查所需密钥长度是否符合AES加密标准（128、192或256位），
-    /// 如果不符合，则返回一个错误。如果密钥长度有效，则生成相应长度的随机密钥。
-    ///
-    /// # 类型参数
-    /// - `N`: 一个常量 usize 值，指定所需密钥的长度（以字节为单位）。
-    ///
-    /// # 返回值
-    /// - `Ok([u8; N])`: 当密钥成功生成时，返回一个长度为N的字节数组。
-    /// - `Err(KeyError)`: 当密钥长度无效或随机密钥生成失败时，返回一个`KeyError`。
+    // C接口错误码定义
+    #[repr(C)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub enum CryptoErrorCode {
+        Success = 0,
+        EncryptionFailed = 1,
+        DecryptionFailed = 2,
+        UnsupportedKeyLength = 3,
+        InvalidCiphertextLength = 4,
+        TagVerificationFailed = 5,
+        InvalidNonceLength = 6,
+        InvalidTagLength = 7,
+        Base64EncodeError = 8,
+        Base64DecodeError = 9,
+        InvalidCiphertextFormat = 10,
+        Utf8DecodingFailed = 11,
+        KeyGenerationFailed = 12,
+        NullPointerError = 13,
+    }
+
+    // C接口结构体：加密解密选项
+    #[repr(C)]
+    #[derive(Debug, Clone, Copy)]
+    pub struct CEncryptionOptions {
+        pub nonce_length: usize,
+        pub tag_length: usize,
+    }
+
+    // C接口结构体：AES-CBC模式
+    #[repr(C)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub enum CAesCbcMode {
+        FixedIv = 0,
+        RandomIv = 1,
+    }
+
+    // 密钥生成（保持原逻辑）
     pub fn generate_key<const N: usize>() -> Result<[u8; N], KeyError> {
-        // 检查密钥长度是否为AES加密标准支持的长度
         if N != AES_128_KEY_LEN && N != AES_192_KEY_LEN && N != AES_256_KEY_LEN {
             return Err(KeyError::InvalidKeyLength);
         }
 
-        // 初始化一个长度为N的字节数组来存储密钥
         let mut key = [0u8; N];
-        // 生成随机密钥，如果生成失败则返回错误
         rand::rand_bytes(&mut key).map_err(|_| KeyError::RandomFailed)?;
-        // 成功生成密钥后，返回Ok
         Ok(key)
     }
 
-    /// 生成一个Base64编码的随机密钥
-    ///
-    /// # 泛型参数
-    /// - `N`: 密钥的长度，由调用者指定
-    ///
-    /// # 返回值
-    /// - `Result<String, KeyError>`: 返回一个结果，包含生成的Base64编码密钥字符串或错误信息
-    ///
-    /// # 功能描述
-    /// 本函数旨在生成一个指定长度的随机密钥，并将其Base64编码后返回
-    /// 它首先调用`generate_key`函数生成一个二进制密钥，然后使用`base64_encode`函数将其编码为Base64格式的字符串
-    /// 如果在生成密钥或编码过程中遇到错误，将返回相应的错误信息
     pub fn generate_key_base64<const N: usize>() -> Result<String, KeyError> {
-        // 生成一个长度为N的二进制密钥
         let key = generate_key::<N>()?;
-        // 将二进制密钥Base64编码，并返回编码后的字符串
         Ok(base64_encode(&key))
     }
 
-    /// 将字节切片进行Base64编码
-    ///
-    /// # 参数
-    /// * `data`: 待编码的字节切片
-    ///
-    /// # 返回值
-    /// 返回一个Base64编码后的字符串
+    // Base64编解码（保持原逻辑）
     pub fn base64_encode(data: &[u8]) -> String {
         general_purpose::STANDARD.encode(data)
     }
 
-    /// Base64解码
     pub fn base64_decode(data: &str) -> Result<Vec<u8>, CryptoError> {
         general_purpose::STANDARD
             .decode(data)
             .map_err(|e| CryptoError::Base64DecodeError(e.to_string()))
     }
 
-    // AES-GCM 模式（原有代码）
-    /// 根据密钥长度选择合适的加密算法（GCM模式）
+    // GCM模式核心逻辑（保持原逻辑）
     fn select_cipher(key: &[u8]) -> Result<Cipher, CryptoError> {
         match key.len() {
             AES_128_KEY_LEN => Ok(Cipher::aes_128_gcm()),
@@ -135,7 +134,6 @@ pub mod safe {
         }
     }
 
-    /// 加密选项配置（GCM模式）
     #[derive(Debug, Clone)]
     pub struct EncryptionOptions {
         pub nonce_length: usize,
@@ -151,8 +149,6 @@ pub mod safe {
         }
     }
 
-    /// 使用GCM模式加密
-    /// 使用GCM模式加密
     pub fn encrypt_with_options(
         key: &[u8],
         plaintext: &[u8],
@@ -164,7 +160,6 @@ pub mod safe {
 
         let cipher = select_cipher(key)?;
         let mut iv = vec![0u8; options.nonce_length];
-        // 修正此处的 map_err 调用
         rand::rand_bytes(&mut iv)
             .map_err(|err: ErrorStack| CryptoError::EncryptionFailed(err.to_string()))?;
 
@@ -186,18 +181,15 @@ pub mod safe {
         Ok(result)
     }
 
-    /// 使用默认选项加密（GCM模式）
     pub fn encrypt(key: &[u8], plaintext: &[u8]) -> Result<Vec<u8>, CryptoError> {
         encrypt_with_options(key, plaintext, &EncryptionOptions::default())
     }
 
-    /// 加密并返回Base64编码结果（GCM模式）
     pub fn encrypt_to_base64(key: &[u8], plaintext: &[u8]) -> Result<String, CryptoError> {
         let ciphertext = encrypt(key, plaintext)?;
         Ok(base64_encode(&ciphertext))
     }
 
-    /// 解密选项配置（GCM模式）
     #[derive(Debug, Clone)]
     pub struct DecryptionOptions {
         pub nonce_length: usize,
@@ -213,7 +205,6 @@ pub mod safe {
         }
     }
 
-    /// 使用GCM模式解密
     pub fn decrypt_with_options(
         key: &[u8],
         ciphertext: &[u8],
@@ -246,12 +237,10 @@ pub mod safe {
         Ok(plaintext)
     }
 
-    /// 使用默认选项解密（GCM模式）
     pub fn decrypt(key: &[u8], ciphertext: &[u8]) -> Result<Vec<u8>, CryptoError> {
         decrypt_with_options(key, ciphertext, &DecryptionOptions::default())
     }
 
-    /// 解密Base64编码的密文（GCM模式）
     pub fn decrypt_from_base64(
         key: &[u8],
         ciphertext_base64: &str,
@@ -260,15 +249,13 @@ pub mod safe {
         decrypt(key, &ciphertext)
     }
 
-    // AES-CBC-192 模式（新增代码）
-    /// AES-CBC 加密模式
+    // AES-CBC-192 模式（保持原逻辑）
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     pub enum AesCbcMode {
-        FixedIv,  // 固定IV（全零）
-        RandomIv, // 随机IV
+        FixedIv,
+        RandomIv,
     }
 
-    /// 使用AES-CBC-192加密
     pub fn encrypt_cbc_192(
         key: &[u8],
         plaintext: &str,
@@ -290,7 +277,7 @@ pub mod safe {
 
         let cipher = Cipher::aes_192_cbc();
         let mut encrypter = Crypter::new(cipher, Mode::Encrypt, key, Some(&iv))?;
-        encrypter.pad(true); // 启用PKCS#7填充
+        encrypter.pad(true);
 
         let mut ciphertext = Vec::new();
         encrypter.update(plaintext.as_bytes(), &mut ciphertext)?;
@@ -306,7 +293,6 @@ pub mod safe {
         }
     }
 
-    /// 使用AES-CBC-192解密
     pub fn decrypt_cbc_192(key: &[u8], ciphertext_base64: &str) -> Result<String, CryptoError> {
         if key.len() != AES_192_KEY_LEN {
             return Err(CryptoError::UnsupportedKeyLength { actual: key.len() });
@@ -352,12 +338,293 @@ pub mod safe {
         }
     }
 
-    // 测试代码
+    // C接口辅助函数：错误转换
+    fn crypto_error_to_code(err: &CryptoError) -> CryptoErrorCode {
+        match err {
+            CryptoError::EncryptionFailed(_) => CryptoErrorCode::EncryptionFailed,
+            CryptoError::DecryptionFailed(_) => CryptoErrorCode::DecryptionFailed,
+            CryptoError::UnsupportedKeyLength { .. } => CryptoErrorCode::UnsupportedKeyLength,
+            CryptoError::InvalidCiphertextLength { .. } => CryptoErrorCode::InvalidCiphertextLength,
+            CryptoError::TagVerificationFailed => CryptoErrorCode::TagVerificationFailed,
+            CryptoError::InvalidNonceLength => CryptoErrorCode::InvalidNonceLength,
+            CryptoError::InvalidTagLength => CryptoErrorCode::InvalidTagLength,
+            CryptoError::Base64EncodeError(_) => CryptoErrorCode::Base64EncodeError,
+            CryptoError::Base64DecodeError(_) => CryptoErrorCode::Base64DecodeError,
+            CryptoError::InvalidCiphertextFormat => CryptoErrorCode::InvalidCiphertextFormat,
+            CryptoError::Utf8DecodingFailed(_) => CryptoErrorCode::Utf8DecodingFailed,
+        }
+    }
+
+    // C接口：生成AES密钥（128位）
+   #[unsafe(no_mangle)]
+    pub extern "C" fn generate_aes128_key(key_buf: *mut u8, key_len: *mut usize) -> CryptoErrorCode {
+        if key_buf.is_null() || key_len.is_null() {
+            return CryptoErrorCode::NullPointerError;
+        }
+
+        let key = match generate_key::<AES_128_KEY_LEN>() {
+            Ok(k) => k,
+            Err(_) => return CryptoErrorCode::KeyGenerationFailed,
+        };
+
+        unsafe {
+            *key_len = AES_128_KEY_LEN;
+            let dest = std::slice::from_raw_parts_mut(key_buf, AES_128_KEY_LEN);
+            dest.copy_from_slice(&key);
+        }
+        CryptoErrorCode::Success
+    }
+
+    // C接口：生成AES密钥（192位）
+   #[unsafe(no_mangle)]
+    pub extern "C" fn generate_aes192_key(key_buf: *mut u8, key_len: *mut usize) -> CryptoErrorCode {
+        if key_buf.is_null() || key_len.is_null() {
+            return CryptoErrorCode::NullPointerError;
+        }
+
+        let key = match generate_key::<AES_192_KEY_LEN>() {
+            Ok(k) => k,
+            Err(_) => return CryptoErrorCode::KeyGenerationFailed,
+        };
+
+        unsafe {
+            *key_len = AES_192_KEY_LEN;
+            let dest = std::slice::from_raw_parts_mut(key_buf, AES_192_KEY_LEN);
+            dest.copy_from_slice(&key);
+        }
+        CryptoErrorCode::Success
+    }
+
+    // C接口：生成AES密钥（256位，Base64编码）
+   #[unsafe(no_mangle)]
+    pub extern "C" fn generate_aes256_key_base64(out_key: *mut *mut c_char) -> CryptoErrorCode {
+        if out_key.is_null() {
+            return CryptoErrorCode::NullPointerError;
+        }
+
+        let key_str = match generate_key_base64::<AES_256_KEY_LEN>() {
+            Ok(s) => s,
+            Err(_) => return CryptoErrorCode::KeyGenerationFailed,
+        };
+
+        let c_str = match CString::new(key_str) {
+            Ok(s) => s,
+            Err(_) => return CryptoErrorCode::Base64EncodeError,
+        };
+
+        unsafe {
+            *out_key = c_str.into_raw();
+        }
+        CryptoErrorCode::Success
+    }
+
+    // C接口：AES-GCM加密（Base64输出）
+   #[unsafe(no_mangle)]
+    pub extern "C" fn aes_gcm_encrypt_base64(
+        key: *const u8,
+        key_len: usize,
+        plaintext: *const c_char,
+        ciphertext_out: *mut *mut c_char
+    ) -> CryptoErrorCode {
+        if key.is_null() || plaintext.is_null() || ciphertext_out.is_null() {
+            return CryptoErrorCode::NullPointerError;
+        }
+
+        let key_slice = unsafe { std::slice::from_raw_parts(key, key_len) };
+        let plaintext_str = unsafe { CStr::from_ptr(plaintext).to_string_lossy().into_owned() };
+
+        let result = encrypt_to_base64(key_slice, plaintext_str.as_bytes());
+        match result {
+            Ok(ciphertext) => {
+                let c_str = match CString::new(ciphertext) {
+                    Ok(s) => s,
+                    Err(_) => return CryptoErrorCode::Base64EncodeError,
+                };
+                unsafe { *ciphertext_out = c_str.into_raw() };
+                CryptoErrorCode::Success
+            }
+            Err(e) => crypto_error_to_code(&e),
+        }
+    }
+
+    // C接口：AES-GCM解密（Base64输入）
+   #[unsafe(no_mangle)]
+    pub extern "C" fn aes_gcm_decrypt_base64(
+        key: *const u8,
+        key_len: usize,
+        ciphertext: *const c_char,
+        plaintext_out: *mut *mut c_char
+    ) -> CryptoErrorCode {
+        if key.is_null() || ciphertext.is_null() || plaintext_out.is_null() {
+            return CryptoErrorCode::NullPointerError;
+        }
+
+        let key_slice = unsafe { std::slice::from_raw_parts(key, key_len) };
+        let ciphertext_str = unsafe { CStr::from_ptr(ciphertext).to_string_lossy().into_owned() };
+
+        let result = decrypt_from_base64(key_slice, &ciphertext_str);
+        match result {
+            Ok(plaintext_bytes) => {
+                let plaintext_str = match String::from_utf8(plaintext_bytes) {
+                    Ok(s) => s,
+                    Err(_e) => return CryptoErrorCode::Utf8DecodingFailed,
+                };
+                let c_str = match CString::new(plaintext_str) {
+                    Ok(s) => s,
+                    Err(_) => return CryptoErrorCode::Base64DecodeError,
+                };
+                unsafe { *plaintext_out = c_str.into_raw() };
+                CryptoErrorCode::Success
+            }
+            Err(e) => crypto_error_to_code(&e),
+        }
+    }
+
+    // C接口：AES-CBC-192加密
+   #[unsafe(no_mangle)]
+    pub extern "C" fn aes_cbc192_encrypt(
+        key: *const u8,
+        key_len: usize,
+        plaintext: *const c_char,
+        mode: CAesCbcMode,
+        ciphertext_out: *mut *mut c_char
+    ) -> CryptoErrorCode {
+        if key.is_null() || plaintext.is_null() || ciphertext_out.is_null() {
+            return CryptoErrorCode::NullPointerError;
+        }
+
+        if key_len != AES_192_KEY_LEN {
+            return CryptoErrorCode::UnsupportedKeyLength;
+        }
+
+        let key_slice = unsafe { std::slice::from_raw_parts(key, key_len) };
+        let plaintext_str = unsafe { CStr::from_ptr(plaintext).to_string_lossy().into_owned() };
+        let rust_mode = match mode {
+            CAesCbcMode::FixedIv => AesCbcMode::FixedIv,
+            CAesCbcMode::RandomIv => AesCbcMode::RandomIv,
+        };
+
+        let result = encrypt_cbc_192(key_slice, &plaintext_str, rust_mode);
+        match result {
+            Ok(ciphertext) => {
+                let c_str = match CString::new(ciphertext) {
+                    Ok(s) => s,
+                    Err(_) => return CryptoErrorCode::Base64EncodeError,
+                };
+                unsafe { *ciphertext_out = c_str.into_raw() };
+                CryptoErrorCode::Success
+            }
+            Err(e) => crypto_error_to_code(&e),
+        }
+    }
+
+    // C接口：AES-CBC-192解密
+   #[unsafe(no_mangle)]
+    pub extern "C" fn aes_cbc192_decrypt(
+        key: *const u8,
+        key_len: usize,
+        ciphertext: *const c_char,
+        plaintext_out: *mut *mut c_char
+    ) -> CryptoErrorCode {
+        if key.is_null() || ciphertext.is_null() || plaintext_out.is_null() {
+            return CryptoErrorCode::NullPointerError;
+        }
+
+        if key_len != AES_192_KEY_LEN {
+            return CryptoErrorCode::UnsupportedKeyLength;
+        }
+
+        let key_slice = unsafe { std::slice::from_raw_parts(key, key_len) };
+        let ciphertext_str = unsafe { CStr::from_ptr(ciphertext).to_string_lossy().into_owned() };
+
+        let result = decrypt_cbc_192(key_slice, &ciphertext_str);
+        match result {
+            Ok(plaintext) => {
+                let c_str = match CString::new(plaintext) {
+                    Ok(s) => s,
+                    Err(e) => return crypto_error_to_code(&CryptoError::Utf8DecodingFailed(e.to_string())),
+                };
+                unsafe { *plaintext_out = c_str.into_raw() };
+                CryptoErrorCode::Success
+            }
+            Err(e) => crypto_error_to_code(&e),
+        }
+    }
+
+    // C接口：Base64编码
+   #[unsafe(no_mangle)]
+    pub extern "C" fn base64_encode_c(
+        data: *const u8,
+        data_len: usize,
+        out_str: *mut *mut c_char
+    ) -> CryptoErrorCode {
+        if data.is_null() || out_str.is_null() {
+            return CryptoErrorCode::NullPointerError;
+        }
+
+        let data_slice = unsafe { std::slice::from_raw_parts(data, data_len) };
+        let encoded = base64_encode(data_slice);
+        let c_str = match CString::new(encoded) {
+            Ok(s) => s,
+            Err(_) => return CryptoErrorCode::Base64EncodeError,
+        };
+
+        unsafe { *out_str = c_str.into_raw() };
+        CryptoErrorCode::Success
+    }
+
+    // C接口：Base64解码
+   #[unsafe(no_mangle)]
+    pub extern "C" fn base64_decode_c(
+        data_str: *const c_char,
+        out_data: *mut *mut u8,
+        out_len: *mut usize
+    ) -> CryptoErrorCode {
+        if data_str.is_null() || out_data.is_null() || out_len.is_null() {
+            return CryptoErrorCode::NullPointerError;
+        }
+
+        let data = unsafe { CStr::from_ptr(data_str).to_string_lossy().into_owned() };
+        let decoded = match base64_decode(&data) {
+            Ok(d) => d,
+            Err(e) => return crypto_error_to_code(&e),
+        };
+
+        unsafe {
+            *out_len = decoded.len();
+            let mut buf = vec![0u8; decoded.len()].into_boxed_slice();
+            buf.copy_from_slice(&decoded);
+            *out_data = buf.as_mut_ptr();
+            std::mem::forget(buf); // 转移所有权给C端
+        }
+        CryptoErrorCode::Success
+    }
+
+    // C接口：释放C字符串
+   #[unsafe(no_mangle)]
+    pub extern "C" fn free_c_string(s: *mut c_char) {
+        unsafe {
+            if !s.is_null() {
+                let _ = CString::from_raw(s);
+            }
+        }
+    }
+
+    // C接口：释放字节缓冲区
+   #[unsafe(no_mangle)]
+    pub extern "C" fn free_byte_buffer(buf: *mut u8, len: usize) {
+        unsafe {
+            if !buf.is_null() {
+                let _ = Vec::from_raw_parts(buf, len, len);
+            }
+        }
+    }
+
+    // 测试代码（保持不变）
     #[cfg(test)]
     mod tests {
         use super::*;
 
-        // GCM模式测试
         #[test]
         fn test_gcm_encryption_decryption() {
             let key = generate_key::<AES_256_KEY_LEN>().unwrap();
@@ -368,7 +635,6 @@ pub mod safe {
             assert_eq!(plaintext, decrypted.as_slice());
         }
 
-        // CBC-192 固定IV测试
         #[test]
         fn test_cbc_192_fixed_iv() {
             let key = generate_key::<AES_192_KEY_LEN>().unwrap();
@@ -379,7 +645,6 @@ pub mod safe {
             assert_eq!(plaintext, decrypted);
         }
 
-        // CBC-192 随机IV测试
         #[test]
         fn test_cbc_192_random_iv() {
             let key = generate_key::<AES_192_KEY_LEN>().unwrap();
@@ -390,7 +655,6 @@ pub mod safe {
             assert_eq!(plaintext, decrypted);
         }
 
-        // 错误处理测试
         #[test]
         fn test_invalid_key_length() {
             let key = "shortkey".as_bytes(); // 10字节

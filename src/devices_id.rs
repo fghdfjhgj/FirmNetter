@@ -1,8 +1,9 @@
 pub mod devices_id {
+    use std::process::Command;
     #[allow(unused_imports)]
     use regex::Regex;
+
     #[warn(unused_imports)]
-    use std::process::Command;
     use thiserror::Error;
 
     #[derive(Error, Debug)]
