@@ -5,7 +5,7 @@ edition = "2024"
 description = "测试，请勿使用！"
 repository = "https://github.com/fghdfjhgj/lib_rust"
 documentation = "https://github.com/fghdfjhgj/lib_rust/blob/main/README.md"
-license = "GPL-3"
+license = "GPL-3.0"
 
 [lib]
 crate-type = ["cdylib", "rlib", "staticlib"]
