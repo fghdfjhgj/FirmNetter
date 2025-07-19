@@ -90,7 +90,9 @@ pub mod devices_id {
                     .map_err(|e| HardwareError::CommandFailed(e.to_string()))?;
 
                 if !output.status.success() {
-                    return Err(HardwareError::CommandFailed("WMIC command failed".parse().unwrap()));
+                    return Err(HardwareError::CommandFailed(
+                        "WMIC command failed".parse().unwrap(),
+                    ));
                 }
 
                 let stdout = String::from_utf8_lossy(&output.stdout);
@@ -171,7 +173,9 @@ pub mod devices_id {
                     .map_err(|e| HardwareError::CommandFailed(e.to_string()))?;
 
                 if !output.status.success() {
-                    return Err(HardwareError::CommandFailed("getmac command failed".parse().unwrap()));
+                    return Err(HardwareError::CommandFailed(
+                        "getmac command failed".parse().unwrap(),
+                    ));
                 }
 
                 let stdout = String::from_utf8_lossy(&output.stdout);

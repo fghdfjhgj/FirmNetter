@@ -1,6 +1,6 @@
 pub mod utils {
     use encoding_rs::GBK;
-    use std::ffi::{c_char, CStr, CString};
+    use std::ffi::{CStr, CString, c_char};
     use std::io;
     use std::io::Write;
     use std::os::raw::c_int;
