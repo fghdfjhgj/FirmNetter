@@ -6,28 +6,34 @@ description = "测试，请勿使用！"
 repository = "https://github.com/fghdfjhgj/lib_rust"
 documentation = "https://github.com/fghdfjhgj/lib_rust/blob/main/README.md"
 license = "GPL-3"
+
 [lib]
-#rclib
-crate-type = ["cdylib","rlib","staticlib"]
-
-
+crate-type = ["cdylib", "rlib", "staticlib"]
 
 [dependencies]
-#rustls-tls or native-tls
-reqwest = { version = "0.12.15", features = ["blocking", "json", "stream", "rustls-tls"] }
-serde = { version = "1.0.219", features = ["derive"] }
-encoding_rs = "0.8.35"
-crossbeam = "0.8.4"
-rayon = "1.10.0"
-once_cell = "1.21.3"
-memmap2 = "0.9.5"
-percent-encoding = "2.3.1"
-thiserror = "2.0.12"
-sha2 = "0.11.0-rc.0"
-hex = "0.4.3"
-regex = "1.11.1"
-openssl = "0.10.73"
 base64 = "0.22.1"
+crossbeam = "0.8.4"
+encoding_rs = "0.8.35"
+hex = "0.4.3"
+memmap2 = "0.9.5"
+once_cell = "1.21.3"
+# 默认不启用任何特性
+openssl = { version = "0.10.73", default-features = false }
+percent-encoding = "2.3.1"
+rayon = "1.10.0"
+regex = "1.11.1"
+reqwest = { version = "0.12.15", features = ["blocking", "json", "stream"] }
+serde = { version = "1.0.219", features = ["derive"] }
+sha2 = "0.11.0-rc.0"
+thiserror = "2.0.12"
+
+# 非 Android 平台启用 vendored
+[target.'cfg(not(target_os = "android"))'.dependencies]
+openssl = { version = "0.10.73", features = ["vendored"] }
+
+# Android 平台不启用 vendored，使用预编译库
+[target.'cfg(target_os = "android")'.dependencies]
+openssl = { version = "0.10.73", default-features = false }
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.55"
@@ -37,27 +43,22 @@ winreg = "0.55"
 cbindgen = "0.29.0"
 
 [profile.release]
-opt-level = "z"      # 最小代码体积优化
-lto = "fat"          # 完全链接时优化（最高性能）
-codegen-units = 1    # 单线程编译提升优化
-panic = "abort"      # 直接终止（减小体积）
-strip = true         # 移除所有符号信息
-debug = false        # 禁用调试信息
+opt-level = "z"
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = true
+debug = false
 
-# 调试模式（开发友好）
 [profile.dev]
-opt-level = 0        # 无优化（最快编译）
-debug = true         # 包含完整调试信息
-split-debuginfo = "unpacked"  # 快速增量编译
-codegen-units = 16   # 并行编译加速
-panic = "unwind"     # 允许 panic 栈展开（便于调试）
-incremental = true   # 启用增量编译
+opt-level = 0
+debug = true
+split-debuginfo = "unpacked"
+codegen-units = 16
+panic = "unwind"
+incremental = true
 
-# 启用 clippy 检查（可选但推荐）
+# Clippy 配置（可选）
 [package.metadata.clippy]
-# 所有 clippy lints 视为警告
-# 可改为 deny = ["all"] 使所有 lints 成为错误
 warn = ["all"]
-denv = ["all"]
-
-
+deny = ["all"]

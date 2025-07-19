@@ -1,5 +1,7 @@
 pub mod devices_id {
+    #[allow(unused_imports)]
     use regex::Regex;
+    #[warn(unused_imports)]
     use std::process::Command;
     use thiserror::Error;
 
@@ -88,7 +90,7 @@ pub mod devices_id {
                     .map_err(|e| HardwareError::CommandFailed(e.to_string()))?;
 
                 if !output.status.success() {
-                    return Err(HardwareError::CommandFailed("WMIC command failed"));
+                    return Err(HardwareError::CommandFailed("WMIC command failed".parse().unwrap()));
                 }
 
                 let stdout = String::from_utf8_lossy(&output.stdout);
@@ -169,7 +171,7 @@ pub mod devices_id {
                     .map_err(|e| HardwareError::CommandFailed(e.to_string()))?;
 
                 if !output.status.success() {
-                    return Err(HardwareError::CommandFailed("getmac command failed"));
+                    return Err(HardwareError::CommandFailed("getmac command failed".parse().unwrap()));
                 }
 
                 let stdout = String::from_utf8_lossy(&output.stdout);
