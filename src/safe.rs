@@ -1,11 +1,11 @@
 pub mod safe {
-    use base64::{engine::general_purpose, Engine as _};
+    use base64::{Engine as _, engine::general_purpose};
     use openssl::{
         error::ErrorStack,
         rand,
         symm::{Cipher, Crypter, Mode},
     };
-    use std::ffi::{c_char, CStr, CString};
+    use std::ffi::{CStr, CString, c_char};
     use thiserror::Error;
 
     // 常量定义（保持不变）
@@ -356,8 +356,11 @@ pub mod safe {
     }
 
     // C接口：生成AES密钥（128位）
-   #[unsafe(no_mangle)]
-    pub extern "C" fn generate_aes128_key(key_buf: *mut u8, key_len: *mut usize) -> CryptoErrorCode {
+    #[unsafe(no_mangle)]
+    pub extern "C" fn generate_aes128_key(
+        key_buf: *mut u8,
+        key_len: *mut usize,
+    ) -> CryptoErrorCode {
         if key_buf.is_null() || key_len.is_null() {
             return CryptoErrorCode::NullPointerError;
         }
@@ -376,8 +379,11 @@ pub mod safe {
     }
 
     // C接口：生成AES密钥（192位）
-   #[unsafe(no_mangle)]
-    pub extern "C" fn generate_aes192_key(key_buf: *mut u8, key_len: *mut usize) -> CryptoErrorCode {
+    #[unsafe(no_mangle)]
+    pub extern "C" fn generate_aes192_key(
+        key_buf: *mut u8,
+        key_len: *mut usize,
+    ) -> CryptoErrorCode {
         if key_buf.is_null() || key_len.is_null() {
             return CryptoErrorCode::NullPointerError;
         }
@@ -396,7 +402,7 @@ pub mod safe {
     }
 
     // C接口：生成AES密钥（256位，Base64编码）
-   #[unsafe(no_mangle)]
+    #[unsafe(no_mangle)]
     pub extern "C" fn generate_aes256_key_base64(out_key: *mut *mut c_char) -> CryptoErrorCode {
         if out_key.is_null() {
             return CryptoErrorCode::NullPointerError;
@@ -419,12 +425,12 @@ pub mod safe {
     }
 
     // C接口：AES-GCM加密（Base64输出）
-   #[unsafe(no_mangle)]
+    #[unsafe(no_mangle)]
     pub extern "C" fn aes_gcm_encrypt_base64(
         key: *const u8,
         key_len: usize,
         plaintext: *const c_char,
-        ciphertext_out: *mut *mut c_char
+        ciphertext_out: *mut *mut c_char,
     ) -> CryptoErrorCode {
         if key.is_null() || plaintext.is_null() || ciphertext_out.is_null() {
             return CryptoErrorCode::NullPointerError;
@@ -448,12 +454,12 @@ pub mod safe {
     }
 
     // C接口：AES-GCM解密（Base64输入）
-   #[unsafe(no_mangle)]
+    #[unsafe(no_mangle)]
     pub extern "C" fn aes_gcm_decrypt_base64(
         key: *const u8,
         key_len: usize,
         ciphertext: *const c_char,
-        plaintext_out: *mut *mut c_char
+        plaintext_out: *mut *mut c_char,
     ) -> CryptoErrorCode {
         if key.is_null() || ciphertext.is_null() || plaintext_out.is_null() {
             return CryptoErrorCode::NullPointerError;
@@ -481,13 +487,13 @@ pub mod safe {
     }
 
     // C接口：AES-CBC-192加密
-   #[unsafe(no_mangle)]
+    #[unsafe(no_mangle)]
     pub extern "C" fn aes_cbc192_encrypt(
         key: *const u8,
         key_len: usize,
         plaintext: *const c_char,
         mode: CAesCbcMode,
-        ciphertext_out: *mut *mut c_char
+        ciphertext_out: *mut *mut c_char,
     ) -> CryptoErrorCode {
         if key.is_null() || plaintext.is_null() || ciphertext_out.is_null() {
             return CryptoErrorCode::NullPointerError;
@@ -519,12 +525,12 @@ pub mod safe {
     }
 
     // C接口：AES-CBC-192解密
-   #[unsafe(no_mangle)]
+    #[unsafe(no_mangle)]
     pub extern "C" fn aes_cbc192_decrypt(
         key: *const u8,
         key_len: usize,
         ciphertext: *const c_char,
-        plaintext_out: *mut *mut c_char
+        plaintext_out: *mut *mut c_char,
     ) -> CryptoErrorCode {
         if key.is_null() || ciphertext.is_null() || plaintext_out.is_null() {
             return CryptoErrorCode::NullPointerError;
@@ -542,7 +548,11 @@ pub mod safe {
             Ok(plaintext) => {
                 let c_str = match CString::new(plaintext) {
                     Ok(s) => s,
-                    Err(e) => return crypto_error_to_code(&CryptoError::Utf8DecodingFailed(e.to_string())),
+                    Err(e) => {
+                        return crypto_error_to_code(&CryptoError::Utf8DecodingFailed(
+                            e.to_string(),
+                        ));
+                    }
                 };
                 unsafe { *plaintext_out = c_str.into_raw() };
                 CryptoErrorCode::Success
@@ -552,11 +562,11 @@ pub mod safe {
     }
 
     // C接口：Base64编码
-   #[unsafe(no_mangle)]
+    #[unsafe(no_mangle)]
     pub extern "C" fn base64_encode_c(
         data: *const u8,
         data_len: usize,
-        out_str: *mut *mut c_char
+        out_str: *mut *mut c_char,
     ) -> CryptoErrorCode {
         if data.is_null() || out_str.is_null() {
             return CryptoErrorCode::NullPointerError;
@@ -574,11 +584,11 @@ pub mod safe {
     }
 
     // C接口：Base64解码
-   #[unsafe(no_mangle)]
+    #[unsafe(no_mangle)]
     pub extern "C" fn base64_decode_c(
         data_str: *const c_char,
         out_data: *mut *mut u8,
-        out_len: *mut usize
+        out_len: *mut usize,
     ) -> CryptoErrorCode {
         if data_str.is_null() || out_data.is_null() || out_len.is_null() {
             return CryptoErrorCode::NullPointerError;
@@ -601,7 +611,7 @@ pub mod safe {
     }
 
     // C接口：释放C字符串
-   #[unsafe(no_mangle)]
+    #[unsafe(no_mangle)]
     pub extern "C" fn free_c_string(s: *mut c_char) {
         unsafe {
             if !s.is_null() {
@@ -611,7 +621,7 @@ pub mod safe {
     }
 
     // C接口：释放字节缓冲区
-   #[unsafe(no_mangle)]
+    #[unsafe(no_mangle)]
     pub extern "C" fn free_byte_buffer(buf: *mut u8, len: usize) {
         unsafe {
             if !buf.is_null() {

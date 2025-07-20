@@ -568,7 +568,7 @@ pub mod web {
     }
 
     // 与C语言交互的POST请求函数
-     #[unsafe(no_mangle)]
+    #[unsafe(no_mangle)]
     pub extern "C" fn c_web_post(
         url: *const c_char,
         form_data_keys: *const *const c_char,
@@ -636,7 +636,7 @@ pub mod web {
     }
 
     // 与C语言交互的带头部POST请求函数
-     #[unsafe(no_mangle)]
+    #[unsafe(no_mangle)]
     pub extern "C" fn c_web_post_with_headers(
         url: *const c_char,
         headers: *const CHeaderMap,
@@ -714,7 +714,7 @@ pub mod web {
     }
 
     // 与C语言交互的下载文件函数
-     #[unsafe(no_mangle)]
+    #[unsafe(no_mangle)]
     pub extern "C" fn c_download_file(
         url: *const c_char,
         save_path: *const c_char,
@@ -782,7 +782,7 @@ pub mod web {
     }
 
     // 释放CResPost资源
-     #[unsafe(no_mangle)]
+    #[unsafe(no_mangle)]
     pub extern "C" fn free_c_res_post(result: *mut CResPost) {
         if result.is_null() {
             return;
@@ -804,7 +804,7 @@ pub mod web {
     }
 
     // 释放CDownloadResult资源
-     #[unsafe(no_mangle)]
+    #[unsafe(no_mangle)]
     pub extern "C" fn free_c_download_result(result: *mut CDownloadResult) {
         if result.is_null() {
             return;
@@ -828,8 +828,6 @@ pub mod web {
             (*result).error_msg = ptr::null();
         }
     }
-
-
 
     // 导出C兼容的错误码定义
     #[repr(C)]

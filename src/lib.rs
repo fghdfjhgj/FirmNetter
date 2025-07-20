@@ -1,8 +1,12 @@
+extern crate core;
+
 pub mod utils;
 pub use utils::utils as other_utils;
 
 pub mod devices_id;
 pub use devices_id as other_devices_id;
+pub mod list;
+pub use list::list as other_list;
 pub mod safe;
 pub mod web;
 
